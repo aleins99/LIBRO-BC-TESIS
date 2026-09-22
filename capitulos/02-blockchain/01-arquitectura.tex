@@ -1,0 +1,133 @@
+\section{Arquitectura de blockchain}
+\label{sec:arquitectura_blockchain}
+
+Una \textit{blockchain} es un registro distribuido (\textit{distributed ledger}) de
+transacciones que se mantiene de forma replicada entre los nodos de una red \textit{peer-to-peer},
+sin depender de una autoridad central que valide o custodie su contenido. Su propiedad
+fundamental es que, una vez que un dato se incorpora al registro, modificarlo o eliminarlo
+requiere rehacer todo el trabajo criptográfico posterior a ese punto, lo cual se vuelve
+computacionalmente inviable a medida que la cadena crece. Esta sección describe los cuatro
+componentes que en conjunto sostienen esa propiedad: la estructura de bloques encadenados por
+hash, los árboles de Merkle que resumen su contenido, los mecanismos de consenso que deciden
+qué bloque es válido, y los roles que los distintos tipos de nodos cumplen dentro de la red.
+Estos conceptos son la base sobre la que se apoyan tanto el diseño de Ethereum
+(Sección~\ref{sec:ethereum}) como el esquema de verificación de conocimiento cero desarrollado
+en este trabajo.
+
+\subsection{Estructura de bloques y encadenamiento por hash}
+
+\begin{definition}
+	Un \textbf{bloque} es una estructura de datos compuesta por un \textit{encabezado}
+	(\textit{header}) y un cuerpo. El encabezado contiene, como mínimo, el hash criptográfico
+	del encabezado del bloque anterior, una marca de tiempo, un valor que resume el conjunto de
+	transacciones del bloque (la raíz de un árbol de Merkle, ver Definición~\ref{def:merkle}), y
+	metadatos propios del mecanismo de consenso utilizado (por ejemplo, un \textit{nonce} en
+	\textit{Proof-of-Work}). El cuerpo contiene la lista de transacciones incluidas en el bloque.
+\end{definition}
+
+La \textbf{blockchain} propiamente dicha es la secuencia de bloques $B_0, B_1, \dots, B_n$
+donde $B_0$ es el \textit{bloque génesis} y cada bloque $B_i$, con $i > 0$, referencia a su
+predecesor incluyendo $H(B_{i-1})$ en su propio encabezado, siendo $H$ una función de hash
+criptográfica (típicamente SHA-256 o Keccak-256). Esta construcción encadenada es lo que le da
+su nombre a la estructura y es la responsable directa de su inmutabilidad: como el hash de un
+bloque depende del hash del bloque anterior, alterar el contenido de $B_i$ cambia su hash
+$H(B_i)$, lo que invalida la referencia almacenada en $B_{i+1}$, y por extensión la de todos
+los bloques posteriores hasta la cabeza de la cadena. Un atacante que quisiera modificar una
+transacción confirmada tendría entonces que recalcular el trabajo de consenso de todos los
+bloques desde ese punto en adelante, y hacerlo más rápido que el resto de la red honesta le
+suma nuevos bloques a la cadena legítima.
+
+\subsection{Árboles de Merkle y pruebas de inclusión}
+\label{sec:merkle}
+
+Incluir el hash de cada transacción individual en el encabezado del bloque sería costoso en
+espacio y haría que verificar la pertenencia de una transacción específica implicara descargar
+el bloque completo. Los árboles de Merkle~\cite{merkle1988digital} resuelven ambos problemas.
+
+\begin{definition}
+	\label{def:merkle}
+	Un \textbf{árbol de Merkle} es un árbol binario en el que cada hoja contiene el hash de un
+	elemento de datos (en este contexto, una transacción) y cada nodo interno contiene el hash
+	de la concatenación de sus dos hijos: $h_{padre} = H(h_{izq} \Vert h_{der})$. El hash
+	almacenado en la raíz, llamado \textbf{raíz de Merkle}, es un compromiso criptográfico sobre
+	el conjunto completo de hojas: cambiar cualquier transacción altera su hash hoja y, por
+	propagación, la raíz.
+\end{definition}
+
+Esta estructura permite generar una \textbf{prueba de inclusión} (\textit{Merkle proof}) de que
+una transacción $t$ forma parte de un bloque sin necesitar el bloque completo: basta con
+entregar $t$ junto con los hashes hermanos de cada nivel del camino desde su hoja hasta la
+raíz. Quien verifica recalcula los hashes de ese camino y comprueba que el resultado coincide
+con la raíz de Merkle publicada en el encabezado del bloque. Para un árbol con $n$ hojas, la
+prueba tiene tamaño $O(\log n)$, en contraste con el $O(n)$ que implicaría transmitir todas las
+transacciones. Ethereum extiende esta idea con \textit{Merkle-Patricia tries}, que además de
+las transacciones permiten probar el estado de una cuenta o el resultado de una ejecución
+(Sección~\ref{sec:ethereum}); esta capacidad de generar pruebas de inclusión compactas y
+verificables es, precisamente, el mecanismo que este trabajo utiliza para certificar
+\textit{on-chain}, mediante una prueba de conocimiento cero, que una transacción de bloqueo fue
+efectivamente incluida en la cadena de origen.
+
+\subsection{Mecanismos de consenso}
+
+Que cada nodo mantenga una copia del registro no es suficiente: en una red sin autoridad
+central, distintos nodos pueden recibir transacciones en distinto orden o proponer bloques en
+simultáneo, y es necesario que todos converjan a una única secuencia de bloques válida. Este es
+un caso particular del problema de los generales bizantinos~\cite{lamport1982byzantine}: lograr
+acuerdo entre participantes distribuidos cuando una fracción de ellos puede ser maliciosa o
+fallar arbitrariamente. Un \textbf{mecanismo de consenso} es el protocolo que resuelve este
+problema definiendo, ante bloques o cadenas en conflicto, cuál es la versión canónica.
+
+Los dos mecanismos dominantes son:
+
+\begin{itemize}
+	\item \textbf{Proof-of-Work (PoW)}: introducido por Bitcoin~\cite{nakamoto2008bitcoin}, exige
+	que quien propone un bloque resuelva un problema computacional costoso (encontrar un
+	\textit{nonce} tal que $H(\text{header})$ sea menor a un umbral de dificultad). La cadena
+	válida es la que acumula mayor trabajo computacional total, lo que hace que reescribir el
+	historial requiera superar la capacidad de cómputo de toda la red honesta. Su finalidad es
+	\textit{probabilística}: la confianza en que un bloque no será revertido crece con la
+	cantidad de bloques confirmados sobre él, pero nunca es absoluta.
+
+	\item \textbf{Proof-of-Stake (PoS)}: sustituye el costo computacional por un costo
+	económico. Los participantes (\textit{validadores}) bloquean una cantidad de la
+	criptomoneda nativa como garantía y son seleccionados para proponer y atestiguar bloques en
+	proporción a su participación bloqueada (\textit{stake}). Un comportamiento malicioso
+	detectable (como firmar dos bloques en conflicto para la misma posición) resulta en la
+	pérdida de parte o la totalidad de esa garantía (\textit{slashing}). A diferencia de PoW,
+	las variantes modernas de PoS —como la que adoptó Ethereum tras \textit{The Merge}— pueden
+	alcanzar \textbf{finalidad determinística}: una vez que un bloque acumula suficientes
+	atestiguaciones, revertirlo es no solo improbable sino que exige destruir económicamente a
+	los validadores responsables. Este mecanismo de finalidad, y el comité que la certifica en
+	Ethereum, se retoma en la Sección~\ref{sec:ethereum} y es la raíz de confianza sobre la que
+	se construye el puente propuesto en este trabajo.
+\end{itemize}
+
+\subsection{Roles de nodos y topología de red}
+
+No todos los participantes de una red blockchain cumplen la misma función ni requieren los
+mismos recursos:
+
+\begin{itemize}
+	\item \textbf{Nodos completos} (\textit{full nodes}): descargan y validan de forma
+	independiente cada bloque y cada transacción desde el bloque génesis, manteniendo una copia
+	íntegra del estado de la red. No confían en ningún tercero: verifican por sí mismos que se
+	respetaron las reglas de consenso y de validez de transacciones.
+
+	\item \textbf{Mineros o validadores}: además de validar, participan activamente en la
+	producción de nuevos bloques (resolviendo el rompecabezas de PoW o siendo seleccionados y
+	atestiguando en PoS).
+
+	\item \textbf{Clientes ligeros} (\textit{light clients}): no almacenan la cadena completa ni
+	reejecutan todas las transacciones; en su lugar, confían en los encabezados de bloque —en
+	particular en su raíz de Merkle y, en redes PoS, en la firma del comité que certifica su
+	finalidad— para verificar de forma eficiente si una transacción específica fue incluida,
+	mediante una prueba de inclusión como la descrita en la Sección~\ref{sec:merkle}. Este es
+	precisamente el modelo de confianza que adopta el \textit{relayer} \textit{off-chain} del
+	puente diseñado en este trabajo: no re-ejecuta la cadena de origen, sino que verifica una
+	prueba de inclusión respaldada por la firma del comité de sincronización de Ethereum.
+\end{itemize}
+
+Todos estos roles se comunican mediante una red \textit{peer-to-peer} de propagación por
+\textit{gossip}, en la que cada nodo retransmite a sus pares los bloques y transacciones que
+recibe y considera válidos, sin que exista un servidor central que coordine la difusión de la
+información.

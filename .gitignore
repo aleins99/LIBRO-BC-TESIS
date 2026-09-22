@@ -5,6 +5,9 @@
 *.blg
 *.fdb_latexmk
 *.fls
+*.idx
+*.ilg
+*.ind
 *.lof
 *.log
 *.lot
@@ -14,14 +17,17 @@
 *.toc
 *.xdv
 
-
 # Bibliography
 *.bcf-SAVE-ERROR
 *.bcf-SAVE-ERROR-*
 
-# Build directories
+# Compiled output (final PDF lands in build/ via latexmkrc's $out_dir)
 build/
+dist/
 _minted*/
 
-# macOS
+# Editors / OS
+.vscode/
+.idea/
 .DS_Store
+*.swp

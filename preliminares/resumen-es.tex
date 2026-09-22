@@ -1,0 +1,48 @@
+\centerline{\textbf{\large Verificación de consenso e inclusión de transacciones en Ethereum}}
+\centerline{\textbf{\large con conocimiento cero aplicado a la transferencia de activos digitales}}
+
+\vspace{2cm}
+
+\rightline{Autor: Javier López - Alejandro Marín}
+\vspace{0.5cm}
+\rightline{Asesor: PhD Marcos Villagra}
+
+\vspace{0.5cm}
+
+\noindent
+\textbf{RESUMEN}
+
+\vspace{0.5cm}
+
+\noindent
+Los puentes entre cadenas o popularmente conocidos como \textit{cross-chain bridges}, permiten 
+transferir activos entre distintas \textit{blockchains} y constituyen una pieza central de la 
+interoperabilidad. La mayoría se apoya en el patrón \textit{lock-and-mint} operado por un 
+\textit{relayer} de confianza, un actor que tras observar el bloqueo de fondos en la cadena 
+de origen acuña el equivalente en la cadena de destino. Como toda la seguridad recae en ese 
+operador, que podría acuñar de forma fraudulenta, los puentes se han vuelto uno de los blancos 
+más explotados del ecosistema. 
+En este trabajo se diseña e implementa un puente de confianza reducida
+(\textit{trust-minimized}) que sustituye esa confianza por verificación criptográfica. El
+contrato de destino solo acuña cuando valida \textit{on-chain} una prueba de conocimiento cero
+(\textit{zero-knowledge}) que demuestra tanto la inclusión real de la transacción de bloqueo en
+un bloque de la cadena de origen a través de una prueba de inclusión en el árbol de transacciones, 
+como la coincidencia del destinatario y el monto de la transferencia con esa transacción, de modo que
+no puedan adulterarse. Los circuitos se desarrollaron en Noir y sus verificadores se
+desplegaron \textit{on-chain} en Solidity. Un \textit{relayer} \textit{off-chain} construye la
+prueba de cada operación y la remite al contrato de destino, donde deja de ser un acuñador de
+confianza y pasa a ser un probador sin permisos, ya que cualquiera con una prueba válida puede
+liberar los fondos y nadie puede acuñar sin ella. De manera complementaria se diseña la
+validación de la firma del comité de sincronización (\textit{sync committee}) de Ethereum como
+raíz de confianza sobre la finalidad del bloque. La solución se validó sobre redes de prueba reales, con Ethereum
+Sepolia como cadena de origen y Optimism Sepolia como destino. Adicionalmente incluye una interfaz web y un
+modo comparativo que evidencia de forma experimental cómo el esquema clásico admite la
+acuñación fraudulenta mientras que el esquema con verificación de conocimiento cero la rechaza.
+
+\vspace{0.5cm}
+
+\noindent
+\textbf{Palabras Clave}: puentes entre cadenas (\textit{cross-chain bridges}); pruebas de
+conocimiento cero (\textit{zk-SNARKs}); Noir; UltraHonk; verificación \textit{on-chain};
+interoperabilidad \textit{blockchain}; prueba de inclusión (árbol de Merkle-Patricia);
+confianza reducida (\textit{trust-minimization}); Ethereum.

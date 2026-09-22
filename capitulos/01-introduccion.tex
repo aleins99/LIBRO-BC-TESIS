@@ -1,0 +1,127 @@
+\section{Contexto y antecedentes}
+
+Ethereum se ha consolidado como la plataforma de referencia para el despliegue de contratos
+inteligentes y constituye la base sobre la que se sostiene una porción significativa del
+ecosistema de finanzas descentralizadas~\cite{buterin2014ethereum}. Este crecimiento no se
+produjo de forma aislada, sino que estuvo acompañado por la proliferación de redes de
+\textit{Layer 2} y cadenas alternativas que replican o extienden su modelo de ejecución, cada
+una optimizada según distintos criterios de costo, rendimiento o descentralización. La
+fragmentación resultante de este ecosistema plantea la necesidad de que los activos digitales y
+los datos puedan trasladarse entre las distintas cadenas que lo componen, requisito que se
+conoce como interoperabilidad. Los puentes entre cadenas, o \textit{cross-chain bridges},
+constituyen la infraestructura que hace posible dicho traslado, de modo que la seguridad de
+estos mecanismos determina, en gran medida, la seguridad de los fondos que a través de ellos se
+transfieren.
+
+Paralelamente al desarrollo de estas redes, las pruebas de conocimiento cero
+(\textit{Zero-Knowledge Proofs}) evolucionaron desde ser un objeto de estudio predominantemente
+teórico hasta convertirse en una herramienta de ingeniería aplicable a problemas concretos. Esta
+tecnología permite comprimir la verificación de un cómputo arbitrariamente extenso en una prueba
+sucinta, cuya validación puede realizarse en una fracción del tiempo y del costo que exigiría
+reejecutar dicho cómputo. Aplicada al contexto de Ethereum, esta propiedad habilita la
+verificación liviana, desde otra cadena, tanto del consenso alcanzado por los validadores —a
+través de la firma emitida por el comité de sincronización que certifica la finalidad de un
+bloque— como de la inclusión efectiva de una transacción particular dentro de ese bloque, lo
+cual se logra mediante una prueba sobre su árbol de Merkle-Patricia. La combinación de ambas
+verificaciones, comprimidas en una única prueba de conocimiento cero, constituye el fundamento
+técnico sobre el que resulta posible construir un puente entre cadenas cuya seguridad no dependa
+de la honestidad de un intermediario, sino de una demostración matemáticamente verificable. En
+el presente trabajo, este fundamento se materializa mediante el diseño e implementación de un
+puente del tipo \textit{lock-and-mint}, en el cual el bloqueo de un activo en la cadena de
+origen habilita su acuñación equivalente en la cadena de destino únicamente cuando dicha prueba
+ha sido validada \textit{on-chain}.
+
+\section{Planteamiento del problema}
+
+La verificación directa del consenso de Ethereum y de la inclusión de una transacción, sin
+comprimir dicho cómputo mediante una prueba de conocimiento cero, resulta impracticable cuando
+se pretende realizar fuera de la propia cadena. Reproducir la agregación de las firmas del
+comité de sincronización y recorrer un árbol de Merkle-Patricia dentro de un contrato
+inteligente desplegado en otra cadena implica un volumen considerable de operaciones
+criptográficas, fundamentalmente sobre curvas elípticas, cuyo costo en gas resulta, en la
+práctica, prohibitivo. Esta limitación conduce a que los sistemas de interoperabilidad
+existentes adopten un compromiso distinto, en el cual la verificación criptográfica del estado
+de la cadena de origen es sustituida por la delegación de dicha verificación en un comité de
+validadores externos sobre el cual se deposita confianza. Este diseño traslada el problema de
+seguridad del propio protocolo hacia el comportamiento honesto de un conjunto reducido de
+actores, y esta delegación de confianza ha constituido, de manera sistemática, el punto de
+falla explotado en los incidentes de seguridad más costosos sufridos por puentes entre cadenas
+hasta la fecha~\cite{zhang2023bridgesok}. Persiste, en consecuencia, una tensión no resuelta
+entre dos objetivos igualmente necesarios: por un lado, alcanzar garantías criptográficas
+equivalentes a las del consenso de la cadena de origen y, por otro, mantener un costo de
+verificación \textit{on-chain}, tanto en gas como en tiempo de generación de la prueba, que
+resulte viable para un sistema de uso real.
+
+\section{Justificación}
+
+El ecosistema de herramientas orientadas al desarrollo de circuitos de conocimiento cero
+capaces de abordar este volumen de cómputo criptográfico se encuentra, a su vez, en un proceso
+activo de maduración, y ofrece actualmente dos paradigmas de diseño claramente diferenciados.
+El primero está representado por los lenguajes de dominio específico, orientados
+exclusivamente a la escritura de circuitos, entre los cuales se encuentra Noir~\cite{noirlang},
+que expone al desarrollador primitivas y un modelo de programación concebidos desde su diseño
+para la generación eficiente de pruebas. El segundo paradigma corresponde a las máquinas
+virtuales de conocimiento cero de propósito general, cuyo exponente más reciente es
+SP1~\cite{succinctsp1}, las cuales permiten probar la ejecución de programas escritos en un
+lenguaje de propósito general, en este caso Rust, compilados a un conjunto de instrucciones que
+la máquina virtual ejecuta y prueba sin que el desarrollador deba razonar directamente en
+términos de restricciones aritméticas. Si bien ambos paradigmas persiguen resolver el mismo
+tipo de problema, lo hacen mediante compromisos de diseño distintos entre la expresividad del
+lenguaje, la facilidad de desarrollo y depuración, y el rendimiento final del circuito
+resultante. Dado que ambas herramientas son de adopción reciente y se encuentran en desarrollo
+activo, no existe todavía evidencia empírica consolidada que permita fundamentar la elección de
+uno u otro paradigma para la implementación de un caso de uso concreto y computacionalmente
+exigente, como lo es la verificación de consenso e inclusión de transacciones en Ethereum. El
+presente trabajo se propone generar dicha evidencia mediante la implementación de un mismo
+problema en ambas tecnologías, bajo condiciones comparables, y la medición sistemática de su
+comportamiento. Ambas implementaciones se integran, además, dentro del mismo puente
+\textit{lock-and-mint}, de manera que la comparación entre Noir y SP1 no se limita a un
+ejercicio aislado de generación de pruebas, sino que se valida en el contexto de una
+transferencia real de activos digitales entre cadenas.
+
+\section{Objetivos}
+
+\subsection{Objetivo general}
+
+Diseñar, implementar y comparar empíricamente la verificación de consenso de Ethereum y de
+inclusión de transacciones mediante Noir y SP1, integrando ambas implementaciones en un puente
+\textit{lock-and-mint} de confianza reducida, con el propósito de determinar cuál de ambas
+tecnologías ofrece un mejor rendimiento, un menor costo de verificación y una mayor viabilidad
+práctica para la transferencia segura de activos digitales entre cadenas.
+
+\subsection{Objetivos específicos}
+
+\begin{itemize}
+	\item Investigar los mecanismos de prueba y las arquitecturas de circuitos que subyacen a
+	Noir, en tanto lenguaje de dominio específico, y a SP1, en tanto máquina virtual de
+	conocimiento cero de propósito general basada en Rust.
+	\item Implementar, en ambas tecnologías, la lógica de verificación de encabezados de bloque
+	de Ethereum, de la firma del comité de sincronización y de las pruebas de inclusión de
+	transacciones.
+	\item Medir y comparar las métricas de rendimiento relevantes entre ambas implementaciones,
+	entre las que se incluyen el tiempo de generación de la prueba, el uso de recursos
+	computacionales y de memoria, el costo de verificación \textit{on-chain} en gas, y la
+	complejidad relativa del proceso de desarrollo.
+\end{itemize}
+
+\section{Hipótesis}
+
+El presente trabajo se orienta por la siguiente pregunta de investigación: ¿presenta el
+paradigma de máquina virtual de conocimiento cero de propósito general, representado por SP1,
+ventajas significativas en términos de flexibilidad de desarrollo y de tiempos de ejecución
+frente a un lenguaje de conocimiento cero de dominio específico como Noir, al implementar la
+verificación de consenso e inclusión de transacciones en Ethereum?
+
+\section{Delimitación}
+
+El presente trabajo se circunscribe a la arquitectura de consenso de Ethereum posterior a
+\textit{The Merge}, particularmente al mecanismo del comité de sincronización empleado por los
+clientes ligeros para certificar la finalidad de un bloque, así como a las pruebas de inclusión
+sobre su árbol de Merkle-Patricia. Las implementaciones desarrolladas y las comparativas de
+rendimiento realizadas se validan sobre redes de prueba, empleando Ethereum Sepolia como cadena
+de origen y Optimism Sepolia como cadena de destino, bajo una infraestructura de cómputo
+estandarizada que permite que las mediciones obtenidas para Noir y para SP1 resulten
+comparables entre sí. Quedan fuera del alcance de este trabajo tanto la implementación sobre
+redes principales como la verificación de mecanismos de consenso correspondientes a cadenas
+distintas de Ethereum.
+

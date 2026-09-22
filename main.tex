@@ -1,67 +1,50 @@
 \documentclass[12pt, oneside]{book}
-\input{preambulo.tex}
+\input{metadata}
+\input{preambulo}
 
 \begin{document}
 
 \frontmatter
 
-% -- Portada --
-\input{portada.tex}
-
-% -- Página de cortesía --
-\newpage
-\thispagestyle{empty}
-\null
-\clearpage 
-	
 % -- Carátula --
-\newpage
-\setcounter{page}{1}
-\input{caratula.tex}
+\input{preliminares/caratula.tex}
 
 % -- Título --
 \newpage
-\input{caratula2.tex}
-
-
-
-% -- Hoja de aprobación --
-%\newpage
-%\input{aprobacion.tex}
+\setcounter{page}{1}
+\input{preliminares/caratula2.tex}
 
 % -- Dedicatoria --
 \newpage
-\input{dedicatoria.tex}
+\input{preliminares/dedicatoria.tex}
 
 % -- Agradecimientos --
 \newpage
-\input{agradecimientos.tex}
+\input{preliminares/agradecimientos.tex}
 
 % -- Resumen --
 \newpage
-\input{resumen_es.tex}
+\input{preliminares/resumen-es.tex}
 
 % -- Summary --
 \newpage
-\input{resumen_en.tex}
-
+\input{preliminares/resumen-en.tex}
 
 % -- Índice --
-%(Indice o Contenido (?) )
 \newpage
 \tableofcontents
 
 % -- Lista de figuras --
 \newpage
 \listoffigures
- 
+
 % -- Lista de tablas --
 \newpage
 \listoftables
 
 % -- Lista de símbolos --
 \newpage
-\input{lista_simbolos.tex}
+\input{preliminares/lista-simbolos.tex}
 
 % ----------------------------------------------
 % ----------------------------------------------
@@ -75,44 +58,41 @@
 % ------------------
 \chapter{INTRODUCCIÓN}
 \thispagestyle{empty}
-\input{introduccion.tex}
+\input{capitulos/01-introduccion.tex}
 
 % -------------------
 % -- MARCO TEÓRICO --
 % -------------------
 \chapter{BLOCKCHAIN}
 \thispagestyle{empty}
-\input{Blockchain/01_arquitectura_blockchain.tex}
-\input{Blockchain/02_ethereum.tex}
-\input{Blockchain/03_aztec.tex}
-\input{Blockchain/04_puentes.tex}
+\input{capitulos/02-blockchain/01-arquitectura.tex}
+\input{capitulos/02-blockchain/02-ethereum.tex}
+\input{capitulos/02-blockchain/03-aztec.tex}
+\input{capitulos/02-blockchain/04-puentes.tex}
 
 \chapter{CONOCIMIENTO CERO}
-\input{ConocimientoCero/01_fundamentos.tex}
-\input{ConocimientoCero/02_circom.tex}
-\input{ConocimientoCero/03_noir.tex}
-\input{ConocimientoCero/04_sp1.tex}
-\input{ConocimientoCero/05_otros.tex}
+\input{capitulos/03-conocimiento-cero/01-fundamentos.tex}
+\input{capitulos/03-conocimiento-cero/02-circom.tex}
+\input{capitulos/03-conocimiento-cero/03-noir.tex}
+\input{capitulos/03-conocimiento-cero/04-sp1.tex}
+\input{capitulos/03-conocimiento-cero/05-otros.tex}
 
 % ----------------
 % -- RESULTADOS --
 % ----------------
 \chapter{ZKBRIDGE}
 \thispagestyle{empty}
-\input{zkBridge/01_lock_and_mint.tex}
-\input{zkBridge/02_berkeley_rdi.tex}
-\input{zkBridge/03_diseno_noir.tex}
-\input{zkBridge/04_benchmarks.tex}
-
-
+\input{capitulos/04-zkbridge/01-lock-and-mint.tex}
+\input{capitulos/04-zkbridge/02-berkeley-rdi.tex}
+\input{capitulos/04-zkbridge/03-diseno-noir.tex}
+\input{capitulos/04-zkbridge/04-benchmarks.tex}
 
 % ----------------
 % -- CONCLUSIÓN --
 % ----------------
 \chapter{CONCLUSIÓN} \label{chp:conclusion}
 \thispagestyle{empty}
-\input{conclusion.tex}
-
+\input{capitulos/05-conclusion.tex}
 
 % ----------------
 % -- REFERENCIAS --
@@ -131,7 +111,7 @@
 \chapter*{APÉNDICE}
 \addcontentsline{toc}{chapter}{APÉNDICE}
 \renewcommand{\thechapter}{A}
-\input{apendice.tex}
+\input{anexos/apendice.tex}
 
 % -----------------------
 % -- ÍNDICE ALFABÉTICO --
@@ -141,7 +121,7 @@
 % -- Ficha Catalográfica --
 %\newpage
 %\singlespace
-%\input{catalografica.tex}
+%\input{anexos/catalografica.tex}
 %\onehalfspace
 
 \end{document}
