@@ -5,7 +5,8 @@
 \usepackage{amsfonts}
 \usepackage{csquotes} % For "csquotes missing" warning and babel-biblatex compatibility
 \usepackage[
-	spanish
+	spanish,
+	es-tabla
 ]{babel} % Bibliography
 \usepackage[
 	backend=biber,
@@ -32,6 +33,7 @@
 	list=true
 ]{subcaption} % To add subfigures
 \usepackage{booktabs} % To change weight of table lines
+\usepackage{array} % To set column alignment in tables
 \usepackage{imakeidx} % To make index
 \usepackage{geometry} % To set margin and page size
 \usepackage{setspace} % To set interline spacing
@@ -44,6 +46,8 @@
 \usepackage{enumitem} % To define new type of list
 \usepackage{multicol} % For multiple column in one page
 \usepackage{cleveref} % For footnotes in multiple sentences
+\usepackage{tikz} % To draw diagrams
+\usetikzlibrary{arrows.meta, positioning, fit}
 
 % -------------------------
 % --- image search path ---
