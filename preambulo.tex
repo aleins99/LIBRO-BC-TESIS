@@ -39,6 +39,7 @@
 \usepackage{setspace} % To set interline spacing
 \usepackage{chngcntr} % To enumerate captions by chapter
 \usepackage{hyperref} % To autogenerate hyperlinks
+\hypersetup{hidelinks} % Hide boxes around links
 \usepackage{amssymb} % For symbols such as \boxplus.
 \usepackage{environ} % To define appendix command
 \usepackage{mathrsfs} % To cursive font
@@ -48,6 +49,33 @@
 \usepackage{cleveref} % For footnotes in multiple sentences
 \usepackage{tikz} % To draw diagrams
 \usetikzlibrary{arrows.meta, positioning, fit}
+\usepackage{listings} % To typeset source code
+
+% ------------------------------
+% --- source code formatting ---
+% ------------------------------
+\lstdefinelanguage{Circom}{
+	morekeywords={pragma, circom, template, signal, input, output, component, main,
+		public, var, for, if, else, include, function, return},
+	sensitive=true,
+	morecomment=[l]{//},
+	morecomment=[s]{/*}{*/},
+	morestring=[b]"
+}
+\lstset{
+	basicstyle=\ttfamily\small,
+	keywordstyle=\bfseries,
+	commentstyle=\itshape,
+	columns=fixed,
+	basewidth=0.53em,
+	keepspaces=true,
+	showstringspaces=false,
+	frame=single,
+	numbers=left,
+	numberstyle=\tiny,
+	xleftmargin=2em,
+	framexleftmargin=1.5em
+}
 
 % -------------------------
 % --- image search path ---

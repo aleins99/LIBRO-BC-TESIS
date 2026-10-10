@@ -6,9 +6,12 @@ garantiza la integridad de su registro, desde el encadenamiento de bloques por h
 pruebas de inclusión sobre árboles de Merkle y el modelo de confianza de los clientes ligeros
 (Sección~\ref{sec:arquitectura_blockchain}). En todos esos casos, quien verifica una afirmación
 sobre la cadena necesita disponer de los datos pertinentes y ejecutar por sí mismo el cómputo
-correspondiente. Las pruebas de conocimiento cero ofrecen una alternativa a este modelo, puesto
-que permiten convencer a un verificador de que una afirmación es verdadera, o de que una
-computación se ejecutó correctamente, sin que este deba repetir dicha computación.
+correspondiente. Los sistemas de prueba estudiados en este capítulo, conocidos genéricamente
+como pruebas de conocimiento cero, ofrecen una alternativa a este modelo, puesto que permiten
+convencer a un verificador de que una afirmación es verdadera, o de que una computación se
+ejecutó correctamente, sin que este deba repetir dicha computación. Esta última capacidad no se
+deriva de la propiedad de conocimiento cero, sino de la sucintez de los sistemas empleados,
+distinción que se precisa en las Secciones~\ref{sec:nocion_zk} y~\ref{sec:snarks_starks}.
 
 La presente sección no pretende ofrecer un tratamiento exhaustivo de la teoría de las pruebas
 de conocimiento cero, sino establecer el vocabulario mínimo necesario para comprender las
@@ -134,11 +137,19 @@ En el modelo original de Goldwasser, Micali y Rackoff, probador y verificador in
 varios mensajes antes de que el verificador tome su decisión~\cite{goldwasser1989knowledge}. El
 verificador envía \textit{desafíos} elegidos al azar, y la solidez se apoya en que el probador
 no puede anticiparlos. Este tipo de protocolos se denomina \textbf{interactivo} y presenta
-limitaciones importantes para su uso en una red blockchain. La interacción exige que ambas
-partes estén disponibles al mismo tiempo, debe repetirse con cada verificador y solo convence a
-quien eligió los desafíos. Un contrato inteligente, además, se ejecuta de manera determinista
-como respuesta a una transacción y no puede mantener un diálogo de varias rondas con el
-probador.
+limitaciones importantes para su uso en una red blockchain. La interacción requiere que ambas
+partes participen sucesivamente en cada ronda, aunque no necesariamente mediante una conexión
+simultánea, y debe repetirse con cada verificador. Además, la transcripción resultante no
+constituye, en general, una prueba verificable por terceros, ya que estos no pueden comprobar
+que los desafíos se eligieron al azar y no en acuerdo con el probador. En un protocolo de
+conocimiento cero, de hecho, todo lo que observa el verificador podría haberse generado sin
+conocer el testigo (Sección~\ref{sec:propiedades_zk}), aunque la transferibilidad de una
+transcripción depende, en última instancia, del protocolo concreto. En el caso de un contrato inteligente, que se ejecuta de manera
+determinista como respuesta a cada transacción, un protocolo de varias rondas podría
+implementarse mediante una secuencia de transacciones, pero a costa de gas adicional, de
+latencia entre rondas, de la necesidad de conservar estado entre transacciones y de la
+dificultad de obtener desafíos aleatorios que el probador no pueda manipular, lo que incrementa
+además la complejidad de la implementación.
 
 Una prueba \textbf{no interactiva} consiste, en cambio, en un único mensaje $\pi$ que el
 probador genera por sí solo y que cualquier parte puede verificar en cualquier momento. Blum,
@@ -152,11 +163,26 @@ generar pruebas falsas, se habla de una \textbf{configuración confiable}
 de sistemas presentadas en la Sección~\ref{sec:snarks_starks}.
 
 La técnica más difundida para eliminar la interacción es la \textbf{transformación de
-Fiat-Shamir}~\cite{fiat1987prove}, que reemplaza cada desafío aleatorio del verificador por el
-hash de los mensajes enviados previamente por el probador. Dado que el probador no puede
-predecir la salida de la función de hash antes de fijar sus mensajes, el desafío resulta para él
-tan impredecible como si lo hubiera elegido el verificador, y la prueba puede generarse sin
-intervención de este último. Una prueba así obtenida puede incluirse en una transacción y
+Fiat-Shamir}~\cite{fiat1987prove}, aplicable a protocolos de \textit{desafíos públicos}, es
+decir, aquellos en los que el verificador se limita a enviar valores aleatorios. La
+transformación reemplaza cada desafío por el hash de la transcripción previa, que debe incluir
+el enunciado público y los mensajes enviados hasta ese momento por el probador. Un probador
+deshonesto puede, sin embargo, calcular el hash de distintos mensajes candidatos antes de elegir
+cuál enviar, en busca de uno que le proporcione un desafío favorable, estrategia conocida como
+ataque de búsqueda (\textit{grinding}). La seguridad de la transformación suele analizarse en el
+modelo de oráculo aleatorio, que idealiza la función de hash como una función perfectamente
+aleatoria~\cite{bellare1993random}, y en ese modelo el éxito de dicha búsqueda no depende
+únicamente del tamaño del espacio de desafíos, sino también de la solidez del protocolo
+original, de sus parámetros y del número de evaluaciones de hash que el adversario puede
+realizar. Thaler ilustra este punto señalando que, si el protocolo original ofrece solo 60 bits
+de seguridad, unas $2^{60}$ evaluaciones de hash bastan para encontrar un mensaje favorable,
+cantidad alcanzable con hardware actual, y recomienda configurar el protocolo con un margen
+holgadamente superior a 80 bits~\cite[Sección~5.3]{thaler2022proofs}. Por estos motivos, la
+transformación no resulta automáticamente segura para cualquier protocolo ni para cualquier
+forma de construir la transcripción. Omitir el enunciado
+del cálculo del desafío, por ejemplo, ha dado lugar a ataques
+documentados~\cite{bernhard2012pitfalls}. Aplicada correctamente, la transformación permite
+generar la prueba sin intervención del verificador. Una prueba así obtenida puede incluirse en una transacción y
 ser verificada tanto por un contrato inteligente como por cualquier nodo que valide el bloque,
 lo que la convierte en un objeto persistente y verificable públicamente.
 
@@ -166,8 +192,9 @@ lo que la convierte en un objeto persistente y verificable públicamente.
 
 Esta subsección describe en primer lugar el enfoque basado en circuitos aritméticos y
 restricciones, que constituye el fundamento de herramientas como Circom y Noir. En este enfoque,
-la computación que se desea probar no se expresa como un programa escrito en un lenguaje de
-programación, sino mediante una representación matemática cuya construcción se denomina
+el desarrollador describe la computación mediante un lenguaje, como Circom o Noir, y un
+compilador la transforma en la representación matemática sobre la que opera el sistema de
+prueba. La construcción de esa representación se denomina
 \textbf{aritmetización}~\cite{thaler2022proofs}. Todos los valores que intervienen en esa
 representación son elementos de un \textbf{cuerpo finito} $\mathbb{F}_p$, formado por los enteros
 $\{0, 1, \dots, p - 1\}$ con la suma y el producto calculados módulo un número primo $p$, de
@@ -212,20 +239,6 @@ búsqueda (\textit{lookup tables}), técnica que se retoma en la Sección~\ref{s
 proceso completo se desarrolla en cuatro etapas, que la Figura~\ref{fig:flujo_prueba} representa
 de manera esquemática.
 
-\begin{enumerate}
-	\item \textbf{Configuración inicial.} A partir del sistema de restricciones se generan los
-	parámetros públicos que emplean el probador y el verificador. Esta etapa se realiza una única
-	vez y, en los sistemas transparentes, no requiere valores secretos.
-	\item \textbf{Generación del testigo.} El probador ejecuta la computación sobre las entradas
-	concretas y registra todos los valores que intervienen en ella.
-	\item \textbf{Generación de la prueba.} El probador transforma el testigo en una prueba $\pi$
-	mediante operaciones criptográficas. Esta es, con diferencia, la etapa más costosa del
-	proceso, tanto en tiempo como en memoria.
-	\item \textbf{Verificación.} El verificador comprueba la prueba $\pi$ a partir del enunciado
-	$x$ y de los parámetros públicos, sin acceso al testigo ni a la computación original, y la
-	acepta o la rechaza.
-\end{enumerate}
-
 \begin{figure}[htbp]
 	\centering
 	\begin{tikzpicture}[
@@ -259,9 +272,23 @@ de manera esquemática.
 	\label{fig:flujo_prueba}
 \end{figure}
 
+\begin{enumerate}
+	\item \textbf{Configuración inicial.} A partir del sistema de restricciones se generan los
+	parámetros públicos que emplean el probador y el verificador. Esta etapa se realiza una única
+	vez y, en los sistemas transparentes, no requiere valores secretos.
+	\item \textbf{Generación del testigo.} El probador ejecuta la computación sobre las entradas
+	concretas y registra todos los valores que intervienen en ella.
+	\item \textbf{Generación de la prueba.} El probador transforma el testigo en una prueba $\pi$
+	mediante operaciones criptográficas. En muchas construcciones prácticas, esta etapa
+	suele ser una de las más costosas del proceso, tanto en tiempo como en memoria.
+	\item \textbf{Verificación.} El verificador comprueba la prueba $\pi$ a partir del enunciado
+	$x$ y de los parámetros públicos, sin acceso al testigo ni a la computación original, y la
+	acepta o la rechaza.
+\end{enumerate}
+
 El reparto del trabajo entre ambas partes es marcadamente asimétrico. El costo de generar la
-prueba crece al menos de manera lineal con el tamaño de la computación y supera ampliamente el
-de ejecutarla, mientras que el costo de verificarla es, en los sistemas que se describen en la
+prueba crece al menos de manera lineal con el tamaño de la computación y, en la práctica, suele
+superar ampliamente el de ejecutarla, mientras que el costo de verificarla es, en los sistemas que se describen en la
 Sección~\ref{sec:snarks_starks}, constante o muy pequeño en comparación. Por ese motivo, en las
 aplicaciones blockchain la prueba se genera fuera de la cadena (\textit{off-chain}), en equipos
 con recursos suficientes, y se verifica dentro de la cadena (\textit{on-chain}), en un contrato
@@ -332,16 +359,24 @@ describe un argumento sucinto, no interactivo y con solidez de
 conocimiento~\cite{bitansky2012extractable}. Un SNARK que además es de conocimiento cero se
 denomina zk-SNARK. Las construcciones más difundidas se basan en curvas elípticas y emplean una operación 
 criptográfica denominada \textit{emparejamiento bilineal}, definida entre grupos asociados a
-dichas curvas. El sistema de Groth, conocido como Groth16, produce pruebas del orden de pocos 
-cientos de bytes que se verifican con un número
-constante de operaciones, independientemente del tamaño de la computación~\cite{groth2016size}.
+dichas curvas. El sistema de Groth, conocido como Groth16, produce pruebas del orden de pocos
+cientos de bytes, cuya verificación requiere un número constante de emparejamientos más un
+trabajo proporcional al número de entradas públicas, ya que cada una de ellas debe combinarse con
+la clave de verificación mediante una operación sobre la curva~\cite{groth2016size, snarkjs}.
+Para un número fijo de entradas públicas y un parámetro de seguridad dado, el costo de
+verificación no depende, por lo tanto, del tamaño del circuito.
 PLONK, otro sistema de esta familia, admite una configuración universal, válida para cualquier
 circuito hasta un tamaño máximo, en lugar de la configuración específica para cada circuito que
-requiere Groth16~\cite{gabizon2019plonk}. Noir emplea por defecto
-UltraHonk, un sistema derivado de PLONK que se describe en la Sección~\ref{sec:noir}.
+requiere Groth16~\cite{gabizon2019plonk}. Noir, el lenguaje analizado en
+la Sección~\ref{sec:noir}, delega la generación de pruebas en un backend independiente. Su backend
+de referencia, Barretenberg, genera pruebas mediante UltraHonk, un sistema de la familia de
+PLONK~\cite{noirlang, barretenbergdocs}.
 
-La principal limitación de estos sistemas es que requieren una configuración confiable, cuyos
-valores secretos permitirían generar pruebas falsas si no se destruyen. Para reducir esta
+La principal limitación de construcciones como Groth16, o de PLONK instanciado con compromisos
+KZG, es que requieren una configuración confiable, cuyos valores secretos permitirían generar
+pruebas falsas si no se destruyen. Este requisito depende de la construcción y no es propio de
+todos los SNARKs, ya que existen esquemas basados en compromisos transparentes que no necesitan
+una ceremonia de este tipo~\cite{thaler2022proofs}. Para reducir esta
 confianza se realizan ceremonias con numerosos participantes, cuyo resultado es seguro siempre
 que al menos uno de ellos haya destruido su contribución~\cite{bowe2017scalable}. En contrapartida, estos sistemas ofrecen la
 verificación más económica disponible en Ethereum, que desde 2017 incorpora contratos
@@ -401,7 +436,12 @@ el encabezado y la prueba de inclusión de la transacción, pero reproducir esas
 dentro de un contrato inteligente resulta demasiado costoso. Si ambas verificaciones se expresan
 como un único enunciado, el trabajo costoso queda a cargo de un probador fuera de la cadena, y el
 contrato solo necesita verificar una prueba sucinta. La solidez del sistema garantiza entonces
-que ningún probador puede obtener la aceptación del contrato a partir de un evento inexistente,
-de modo que la seguridad del puente deja de depender de la honestidad de un intermediario. Xie
+que ningún probador puede obtener una prueba válida de un enunciado falso respecto de la relación
+compilada, de modo que la aceptación del contrato deja de depender de la honestidad de un
+intermediario. Esa garantía no agota, sin embargo, la seguridad del puente, que depende también de
+que las restricciones expresen fielmente la afirmación prevista, de los supuestos de seguridad y
+de la finalidad del consenso de la cadena de origen, de la vinculación criptográfica entre la
+prueba y los datos públicos que utiliza el contrato receptor, de la corrección de la lógica de
+ese contrato y de su protección contra la repetición de una misma operación. Xie
 et al.\ demostraron la viabilidad práctica de este enfoque~\cite{xie2022zkbridge}. El diseño concreto de esta verificación para el puente
 desarrollado en el presente trabajo se expone en el Capítulo~\ref{chp:zkbridge}.

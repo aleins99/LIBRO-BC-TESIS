@@ -1,2 +1,405 @@
 \section{Circom}
 \label{sec:circom}
+
+La Sección~\ref{sec:computacion_prueba} presentó el enfoque basado en circuitos aritméticos y
+restricciones, en el cual la computación que se desea probar se expresa como un conjunto de
+ecuaciones sobre un cuerpo finito. Circom constituye una de las herramientas más difundidas
+dentro de ese enfoque y permite observar en concreto cómo una descripción de la computación se
+transforma en un sistema de restricciones, cómo se obtiene el testigo correspondiente y cómo ambos
+elementos se utilizan para generar una prueba. La presente sección describe el lenguaje y su
+compilador, el proceso que conduce desde un circuito hasta una prueba verificable en Ethereum y
+las limitaciones que este modelo de desarrollo impone, en particular cuando se aplica a
+verificaciones propias de las redes blockchain.
+
+% ---------------------------------------------------------------------------
+\subsection{Origen y propósito}
+\label{sec:circom_origen}
+
+Circom es un lenguaje para la descripción de circuitos aritméticos, acompañado de un compilador
+que traduce dichas descripciones a un sistema de restricciones de rango uno (R1CS). Fue
+desarrollado en el ecosistema del proyecto iden3, y su diseño y semántica fueron descritos
+académicamente por Bellés-Muñoz et al.~\cite{belles2023circom}. La versión actual del
+compilador, conocida como Circom~2, está implementada en Rust y reemplazó a una primera
+implementación en JavaScript que se mantiene congelada~\cite{circomdocs}. El ecosistema se
+completa con circomlib, una biblioteca de plantillas reutilizables que implementan primitivas
+criptográficas como las funciones de hash Poseidon, MiMC y Pedersen, firmas EdDSA, comparadores
+y árboles de Merkle dispersos~\cite{circomlib}, y con snarkjs, una implementación en JavaScript
+y WebAssembly de sistemas de prueba que consume los artefactos producidos por el
+compilador~\cite{snarkjs}.
+
+Circom es un \textbf{lenguaje de dominio específico} (\textit{domain-specific language}, DSL), es
+decir, un lenguaje cuyas construcciones corresponden directamente a los elementos de un dominio
+de problemas concreto, en lugar de ofrecer las abstracciones generales de un lenguaje de
+programación convencional. En este caso, los elementos del dominio son las señales, que
+representan valores de $\mathbb{F}_p$, y las restricciones que dichas señales deben satisfacer.
+Esta orientación determina la principal diferencia entre escribir un programa convencional y
+describir un circuito en Circom. En un programa convencional, las instrucciones se ejecutan
+secuencialmente y su efecto queda determinado por el resultado de esa ejecución. En un circuito
+de Circom, en cambio, la descripción cumple dos funciones distintas. Por un lado, indica cómo
+calcular los valores de las señales a partir de las entradas, cálculo que solo realiza el
+probador. Por otro, establece las ecuaciones que esos valores deben satisfacer, y únicamente
+estas ecuaciones forman parte de lo que el verificador comprueba. La separación entre ambas
+funciones, que Circom expone de forma explícita al desarrollador, es el aspecto central del
+lenguaje y la fuente de sus principales riesgos, analizados en la
+Sección~\ref{sec:circom_limitaciones}.
+
+Circom no constituye por sí mismo un sistema de prueba. Su compilador produce el sistema de
+restricciones y un programa capaz de calcular el testigo, pero la configuración inicial, la
+generación de la prueba y su verificación corresponden a herramientas externas, como snarkjs, que
+implementan los sistemas descritos en la Sección~\ref{sec:snarks_starks}.
+
+% ---------------------------------------------------------------------------
+\subsection{Construcción de circuitos}
+\label{sec:circom_construccion}
+
+La unidad básica de descripción en Circom es la \textbf{plantilla} (\textit{template}), que
+define un subcircuito parametrizable con un conjunto de señales y las restricciones que las
+vinculan. Una plantilla puede instanciarse como \textbf{componente} dentro de otra plantilla,
+lo que permite construir circuitos complejos a partir de piezas más simples, del mismo modo en
+que circomlib ofrece plantillas para funciones de hash o comparaciones que se integran en
+circuitos mayores. Todo circuito tiene un componente principal, denominado \lstinline|main|, que
+define la interfaz del circuito completo~\cite{circomdocs}.
+
+Las \textbf{señales} son los valores sobre los que operan las restricciones y se clasifican en
+señales de entrada (\lstinline|signal input|), de salida (\lstinline|signal output|) e
+intermedias (\lstinline|signal|). Su visibilidad se relaciona directamente con las nociones de
+enunciado y testigo de la Sección~\ref{sec:nocion_zk}. Las señales de salida del componente
+principal son siempre públicas, las señales de entrada son privadas salvo que se declaren
+explícitamente como públicas mediante la sintaxis \lstinline[breaklines=true]|component main {public [...]}|, y
+las señales intermedias son siempre privadas~\cite{circomdocs}. Las señales públicas forman, por
+lo tanto, el enunciado que conoce el verificador, mientras que los valores de todas las señales
+conforman, conceptualmente, el testigo. Circom admite además variables declaradas con
+\lstinline|var| que, a diferencia de las señales, no forman parte del testigo ni generan
+restricciones por sí mismas. Una variable puede contener valores conocidos durante la
+compilación, como índices o contadores, pero también valores que dependen de señales y que, por
+lo tanto, solo se conocen durante el cálculo del testigo, así como expresiones aritméticas que el
+compilador emplea para construir restricciones~\cite{circomdocs}.
+
+La relación entre señales se establece mediante tres operadores, cuya diferencia es esencial
+para comprender el lenguaje~\cite{circomdocs}. El operador \lstinline|===| impone una
+restricción entre dos expresiones sin asignar ningún valor. El operador \lstinline|<--| asigna un
+valor a una señal sin generar ninguna restricción, de modo que ese valor solo interviene en el
+cálculo del testigo. El operador \lstinline|<==| combina ambas acciones, ya que asigna el valor
+y genera simultáneamente la restricción de igualdad correspondiente. Los operadores
+\lstinline|==>| y \lstinline|-->| son las variantes de \lstinline|<==| y \lstinline|<--| con la
+asignación escrita en sentido inverso. El compilador exige que toda restricción sea de grado a
+lo sumo dos y pueda llevarse a la forma $A \cdot B + C = 0$, donde $A$, $B$ y $C$ son
+combinaciones lineales de señales, y rechaza las restricciones que no admiten esa
+forma~\cite{circomdocs}. Esta forma coincide con la de una fila de un sistema R1CS, en el que
+cada restricción relaciona el producto de dos combinaciones lineales con una tercera
+(Sección~\ref{sec:computacion_prueba}). Las restricciones lineales se representan en este
+formato tomando una constante como uno de los factores, mientras que no toda expresión de grado
+dos admite una única fila. La restricción $e = a \cdot b + c \cdot d$, por ejemplo, es rechazada
+por el compilador y debe descomponerse mediante una señal intermedia en dos restricciones. Cada
+restricción de Circom tiene, por lo tanto, la forma de una fila de dicho sistema, aunque el
+compilador puede simplificar y transformar el conjunto de restricciones antes de producirlo.
+
+La Figura~\ref{fig:circom_cubico} muestra un ejemplo mínimo que retoma la computación utilizada
+en la Sección~\ref{sec:computacion_prueba}. El circuito permite demostrar el conocimiento de un
+valor privado $w$ tal que $w^{3} + w + 5 = y$, siendo $y$ una salida pública.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{minipage}{0.8\textwidth}
+		\begin{lstlisting}[language=Circom]
+pragma circom 2.1.6;
+
+template Cubic() {
+    signal input w;     // entrada privada
+    signal output y;    // salida publica
+    signal v1;          // senales intermedias
+    signal v2;
+
+    v1 <== w * w;
+    v2 <== v1 * w;
+    y  <== v2 + w + 5;
+}
+
+component main = Cubic();
+\end{lstlisting}
+	\end{minipage}
+	\caption{Circuito Circom que expresa la relación $w^{3} + w + 5 = y$.}
+	\label{fig:circom_cubico}
+\end{figure}
+
+Cada uno de los operadores \lstinline|<==| del ejemplo expresa una restricción, de modo que el
+código describe el sistema
+\begin{equation}
+	\label{eq:circom_cubico}
+	w \cdot w - v_1 = 0, \qquad v_1 \cdot w - v_2 = 0, \qquad (v_2 + w + 5) \cdot 1 - y = 0,
+\end{equation}
+cuyas dos primeras restricciones son no lineales y cuya tercera es lineal. Todas las operaciones
+se realizan en $\mathbb{F}_p$, donde $p$ es, por defecto, el orden primo de 254 bits del grupo
+asociado a la curva BN254, la misma curva para la que Ethereum dispone de contratos
+precompilados~\cite{circomdocs, eip197}. Al evaluar el circuito para la entrada $w = 3$ se
+obtienen los valores $(y, w, v_1, v_2) = (35, 3, 9, 27)$, que corresponden a la asignación
+presentada en la Sección~\ref{sec:computacion_prueba}. Solo $y$ es una señal pública, por lo
+que su valor forma parte de las entradas públicas del sistema de prueba, mientras que $w$ queda
+excluida de ellas. Esta exclusión determina únicamente qué valores recibe el verificador. Que la
+prueba no revele información adicional sobre $w$ más allá de la que pueda deducirse del valor
+público $y$, depende de que el sistema de prueba empleado satisfaga la propiedad de conocimiento 
+cero descrita en la Sección~\ref{sec:propiedades_zk}.
+
+El sistema~\eqref{eq:circom_cubico} reúne las restricciones expresadas en el código, que no
+coinciden necesariamente con las que conserva el sistema compilado. El compilador ofrece tres
+niveles de simplificación. La opción \lstinline|--O0| no aplica ninguna, \lstinline|--O1| solo
+simplifica igualdades entre señales y entre señales y constantes, y \lstinline|--O2| aplica la
+simplificación completa, que puede eliminar restricciones lineales sustituyendo una señal por la
+expresión que la define~\cite{circomdocs}. El nivel aplicado por defecto depende de la versión
+del compilador, ya que fue \lstinline|--O2| hasta la versión 2.1.9 y pasó a ser \lstinline|--O1|
+a partir de la versión 2.2.0~\cite{circomreleases}. La simplificación completa despeja, de cada
+restricción lineal que contenga una señal privada, una de esas señales y la sustituye en las
+demás restricciones, sin eliminar nunca las señales públicas~\cite{circomdocs}. En una
+compilación del ejemplo realizada para el presente trabajo con la versión 2.2.3, las opciones
+\lstinline|--O0| y \lstinline|--O1| conservaron las tres restricciones, mientras que
+\lstinline|--O2| despejó $v_2 = y - w - 5$ de la restricción lineal y lo sustituyó en la
+segunda, de modo que el sistema resultante constó de las dos restricciones $w \cdot w = v_1$ y
+$v_1 \cdot w = y - w - 5$, en las que $v_2$ ya no interviene. La elección de la señal que se
+despeja corresponde al algoritmo del compilador, por lo que el sistema resultante es una de
+varias formas algebraicamente equivalentes de expresar la misma relación.
+
+El ejemplo permite precisar qué significa que un circuito esté \textbf{correctamente
+restringido}. Un circuito lo está cuando las asignaciones que satisfacen su sistema de
+restricciones corresponden exactamente a los casos en que se cumple la relación que el
+desarrollador pretende demostrar. Esta condición no exige que todas las señales auxiliares
+queden determinadas unívocamente. En el circuito de la Figura~\ref{fig:circom_cubico}, una vez
+fijado $w$, las restricciones determinan $v_1$, $v_2$ e $y$, de modo que ningún probador puede
+presentar un valor de $y$ distinto de $w^{3} + w + 5$. En la plantilla \texttt{IsZero} de la
+Sección~\ref{sec:circom_limitaciones}, en cambio, cuando la entrada es nula las restricciones
+fijan la salida en $1$ pero admiten cualquier valor de la señal auxiliar \texttt{inv}, libertad
+que no permite aceptar ninguna afirmación incorrecta. Un circuito \textit{insuficientemente
+restringido} admite, por el contrario, asignaciones que conducen a aceptar afirmaciones que la
+especificación rechaza, mientras que un circuito \textit{sobrerrestringido} rechaza asignaciones
+que la especificación considera legítimas. Estos defectos deben distinguirse de las propiedades
+del sistema de prueba descritas en la Sección~\ref{sec:propiedades_zk}. El sistema criptográfico
+sigue siendo sólido y completo respecto de la relación que efectivamente se compiló, pero un
+circuito insuficientemente restringido compromete la solidez respecto de la especificación
+prevista, y uno sobrerrestringido impide demostrar afirmaciones que, según dicha especificación,
+deberían poder demostrarse.
+
+% ---------------------------------------------------------------------------
+\subsection{Compilación, cálculo del testigo y generación de la prueba}
+\label{sec:circom_flujo}
+
+El proceso que conduce desde un circuito de Circom hasta una prueba verificable concreta las
+etapas generales descritas en la Sección~\ref{sec:computacion_prueba}, y se distribuye entre el
+compilador de Circom y un sistema de prueba externo. La Figura~\ref{fig:circom_flujo} representa
+este proceso para el caso de Groth16 implementado en snarkjs.
+
+En la primera etapa, el compilador procesa el circuito y genera dos artefactos independientes.
+El primero es el sistema de restricciones, almacenado en un archivo binario con extensión
+\texttt{.r1cs}, que define formalmente la relación que la prueba certificará. El segundo es un
+programa capaz de calcular el testigo, que el compilador genera en WebAssembly o en C++, siendo
+esta última opción más eficiente para circuitos de gran tamaño~\cite{circomdocs}. Durante la
+compilación, el compilador comprueba además que todas las restricciones sean de grado a lo sumo
+dos y admitan la forma descrita, y aplica las simplificaciones correspondientes al nivel de
+optimización elegido. Desde la versión 2.0.8 incorpora también una advertencia para los usos de
+\lstinline|<--| en los que la expresión asignada es cuadrática y podría emplearse
+\lstinline|<==|~\cite{circomreleases}. En la versión 2.2.3 utilizada en las compilaciones de
+este trabajo, dicha advertencia se emitió al activar la opción \lstinline|--inspect|, que realiza
+comprobaciones adicionales destinadas a identificar señales potencialmente insuficientemente
+restringidas, como aquellas que no aparecen en ninguna restricción~\cite{circomdocs}.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{tikzpicture}[
+		herramienta/.style = {draw, rounded corners, align=center, minimum height=1.1cm,
+			text width=2.2cm, font=\footnotesize},
+		artefacto/.style = {draw, dashed, align=center, minimum height=0.9cm,
+			text width=2.2cm, font=\footnotesize},
+		flecha/.style = {-{Stealth[length=2.5mm]}, thick},
+		dato/.style = {font=\footnotesize, align=center}
+	]
+		\node[artefacto] (fuente) at (0, 0) {Circuito\\\texttt{.circom}};
+		\node[herramienta] (compilador) at (2.65, 0) {Compilador\\circom};
+		\node[artefacto] (r1cs) at (5.3, 1.5) {Restricciones\\\texttt{.r1cs}};
+		\node[artefacto] (wasm) at (5.3, -1.5) {Calculador\\del testigo};
+		\node[herramienta] (setup) at (7.95, 1.5) {Configuración\\inicial};
+		\node[herramienta] (calc) at (7.95, -1.5) {Cálculo del\\testigo};
+		\node[artefacto] (entradas) at (7.95, -3.5) {Entradas\\\texttt{input.json}}; 
+		\node[artefacto] (zkey) at (10.6, 1.5) {Claves\\\texttt{.zkey}};
+		\node[artefacto] (wtns) at (10.6, -1.5) {Testigo\\\texttt{.wtns}};
+		\node[herramienta] (prove) at (13.25, -1.5) {Generación\\de la prueba};
+		\node[herramienta] (verify) at (13.25, -3.9) {Verificación};
+
+		\draw[flecha] (fuente) -- (compilador);
+		\draw[flecha] (compilador.north) |- (r1cs.west);
+		\draw[flecha] (compilador.south) |- (wasm.west);
+		\draw[flecha] (r1cs) -- (setup);
+		\draw[flecha] (setup) -- (zkey);
+		\draw[flecha] (wasm) -- (calc);
+		\draw[flecha] (entradas) -- (calc);
+		\draw[flecha] (calc) -- (wtns);
+		\draw[flecha] (wtns) -- (prove);
+		\draw[flecha] (zkey.east) -| node[right, dato, pos=0.75] {clave de\\prueba} (prove.north);
+		\draw[flecha] (prove) -- node[left, dato] {$\pi$ y señales\\públicas} (verify);
+		\draw[flecha] (zkey.north) -- ++(0, 0.5) -| node[above, dato, pos=0.25]
+			{clave de verificación} ++(4.3, -2.0) |- (verify.east);
+	\end{tikzpicture}
+	\caption{Proceso de compilación, cálculo del testigo, generación y verificación de una
+	prueba a partir de un circuito Circom.}
+	\label{fig:circom_flujo}
+\end{figure}
+
+En la segunda etapa, el probador ejecuta el calculador del testigo sobre entradas concretas,
+expresadas en un archivo en formato JSON, y obtiene un archivo \texttt{.wtns} con la asignación correspondiente al sistema R1CS
+compilado~\cite{circomdocs}. Este archivo contiene los valores de las señales que el sistema
+conserva, precedidos por la constante $1$ que el formato emplea para representar términos
+independientes, por lo que su tamaño y su orden dependen de la compilación. En el ejemplo de la
+Figura~\ref{fig:circom_cubico}, el testigo obtenido con \lstinline|--O1| contiene los cinco
+valores $(1, 35, 3, 9, 27)$, mientras que con \lstinline|--O2| la señal $v_2$ no forma parte del
+sistema y el testigo se reduce a cuatro valores. Este cálculo
+ejecuta las asignaciones descritas mediante los operadores \lstinline|<--| y \lstinline|<==|,
+pero no constituye una garantía criptográfica, ya que un probador puede producir un archivo de
+testigo por cualquier otro medio. Lo que determina si una prueba será aceptada no es el programa
+que calculó el testigo, sino el hecho de que dicho testigo satisfaga el sistema de restricciones.
+
+La tercera etapa corresponde a la configuración inicial del sistema de prueba. En el caso de
+Groth16, cuyos fundamentos se presentaron en la Sección~\ref{sec:snarks_starks}, la
+configuración se divide en dos fases. La primera, denominada \textit{powers of tau}, es
+independiente del circuito y puede reutilizarse para cualquier circuito hasta un tamaño máximo.
+La segunda es específica del circuito y produce un archivo \texttt{.zkey} que contiene la clave
+de prueba, a partir del cual se exporta la clave de verificación~\cite{circomdocs}. Ambas fases
+admiten contribuciones de múltiples participantes, en el sentido de las ceremonias descritas en
+la Sección~\ref{sec:snarks_starks}~\cite{bowe2017scalable}. snarkjs implementa también PLONK y
+FFLONK, que solo requieren la fase universal~\cite{snarkjs}.
+
+En la cuarta etapa, el probador combina la clave de prueba y el testigo para generar la prueba
+$\pi$, junto con un archivo que contiene los valores de las señales públicas. Finalmente, la
+verificación puede realizarse con snarkjs o mediante un contrato inteligente en Solidity que la
+propia herramienta genera a partir de la clave de verificación~\cite{snarkjs}. Dado que, por
+defecto, Circom trabaja sobre el cuerpo asociado a la curva BN254, el contrato generado puede
+apoyarse en los contratos precompilados de Ethereum para dicha curva~\cite{eip196, eip197}, lo
+que hace posible la verificación \textit{on-chain} descrita en la
+Sección~\ref{sec:computacion_prueba}.
+
+Este proceso permite delimitar las responsabilidades de cada componente. El compilador define
+la relación que se probará, el calculador del testigo obtiene una asignación que la satisface, el
+sistema de prueba genera a partir de ella una prueba sucinta y el verificador comprueba esa
+prueba. En el caso de Groth16, la decisión del verificador se basa en la clave de verificación,
+la prueba $\pi$ y los valores de las entradas públicas. El verificador no recibe el archivo
+\texttt{.r1cs} ni ejecuta el programa que calculó el testigo, pero la clave de verificación se
+deriva del sistema de restricciones compilado durante la configuración inicial, por lo que la
+relación que la prueba certifica es exactamente la que dicho sistema expresa. El programa de
+generación del testigo no aporta, por sí mismo, ninguna garantía criptográfica, y cualquier
+propiedad que no haya quedado expresada como restricción carece de respaldo, con independencia
+de lo que haga ese programa.
+
+% ---------------------------------------------------------------------------
+\subsection{Limitaciones y consideraciones de seguridad}
+\label{sec:circom_limitaciones}
+
+La separación entre cálculo y restricción descrita en la Sección~\ref{sec:circom_origen} es la
+principal fuente de errores en el desarrollo con Circom. El operador \lstinline|<--| resulta
+necesario cuando el cálculo del valor de una señal no puede expresarse directamente mediante una
+restricción cuadrática,
+pero el valor así asignado solo queda respaldado por la prueba si el desarrollador añade
+restricciones que lo vinculen con las demás señales. La plantilla \texttt{IsZero} de circomlib,
+reproducida en la Figura~\ref{fig:circom_iszero}, ilustra este patrón~\cite{circomlib}.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{minipage}{0.8\textwidth}
+		\begin{lstlisting}[language=Circom]
+template IsZero() {
+    signal input in;
+    signal output out;
+    signal inv;
+
+    inv <-- in != 0 ? 1 / in : 0; // solo calculo
+    out <== -in * inv + 1;         // asigna y restringe
+    in * out === 0;                // solo restringe
+}
+\end{lstlisting}
+	\end{minipage}
+	\caption{Plantilla \texttt{IsZero} de circomlib, que combina un cálculo auxiliar con
+	restricciones explícitas.}
+	\label{fig:circom_iszero}
+\end{figure}
+
+La plantilla devuelve $1$ si la entrada es nula y $0$ en caso contrario. Para una entrada
+distinta de cero, la relación $\texttt{in} \cdot \texttt{inv} = 1$ es cuadrática, pero la
+expresión que calcula \texttt{inv} es condicional y emplea una división, por lo que no puede
+asignarse mediante \lstinline|<==|. Por ese motivo, la asignación
+\lstinline[breaklines=true]|inv <-- in != 0 ? 1 / in : 0| solo calcula un valor candidato, que se
+incorpora al testigo, mientras que las dos restricciones establecen las relaciones que toda
+asignación aceptada debe cumplir. Si la entrada es distinta de cero, la segunda restricción
+obliga a que la salida sea nula, y la primera obliga entonces a que \texttt{inv} sea el inverso
+de la entrada. Si la entrada es nula, la primera restricción obliga a que la salida sea $1$, sin
+determinar un único valor de \texttt{inv}. La garantía no consiste, por lo tanto, en que
+cualquier valor de \texttt{inv} satisfaga las restricciones, sino en que toda asignación que las
+satisface produce la salida correcta. El valor calculado sin restricción actúa como una
+sugerencia que las restricciones verifican. Si, en cambio, un circuito asignara su salida mediante
+\lstinline|y <-- w * w;| sin ninguna restricción adicional, el compilador no generaría ninguna
+ecuación que vincule $y$ con $w$, y un probador deshonesto podría generar una prueba válida para
+cualquier valor de $y$. En este caso concreto, las comprobaciones descritas en la
+Sección~\ref{sec:circom_flujo} emiten advertencias, tanto por el uso de \lstinline|<--| con una
+expresión cuadrática como por la presencia de señales que no aparecen en ninguna
+restricción~\cite{circomdocs}. Estas comprobaciones identifican patrones conocidos, pero no
+detectan todas las vulnerabilidades posibles ni sustituyen una revisión de seguridad del
+circuito, ya que determinar en general si un circuito está correctamente restringido requiere
+análisis específicos como los que se describen a continuación.
+
+Los circuitos insuficientemente restringidos constituyen una de las categorías de
+vulnerabilidades más estudiadas en sistemas de prueba sucintos~\cite{chaliasos2024sok}, y han
+motivado el desarrollo de herramientas de análisis específicas. Pailoor et al.\ propusieron un
+método automático para detectar circuitos insuficientemente restringidos~\cite{pailoor2023automated},
+y Wen et al.\ desarrollaron un marco de análisis estático para circuitos de Circom que, evaluado
+sobre más de 258 circuitos de proyectos de código abierto, detectó vulnerabilidades previamente
+desconocidas~\cite{wen2024practical}. Conviene subrayar que este riesgo no es exclusivo de Circom,
+sino propio de todo enfoque en el que el desarrollador define explícitamente las restricciones.
+Circom lo hace visible porque expone de manera directa la diferencia entre asignar un valor y
+restringirlo.
+
+Una segunda limitación, también común al enfoque basado en circuitos, es el costo de las
+operaciones que no son nativas del cuerpo finito, señalado en la
+Sección~\ref{sec:computacion_prueba}. La plantilla \texttt{Num2Bits} de circomlib, que
+descompone un valor en $n$ bits, introduce una restricción de la forma $b_i (b_i - 1) = 0$ para
+cada bit y una restricción adicional que recompone el valor original~\cite{circomlib}. Las
+funciones de hash que operan sobre palabras binarias, como SHA-256 y Keccak-256, deben
+construirse sobre descomposiciones de este tipo, lo que multiplica el número de restricciones. El
+formato R1CS, además, no incorpora de forma nativa los argumentos de búsqueda mencionados en la
+Sección~\ref{sec:computacion_prueba}, que se retoman en la Sección~\ref{sec:noir}.
+
+Estas limitaciones adquieren especial relevancia en las verificaciones propias de los puentes
+entre cadenas, en las que conviene distinguir tres afirmaciones diferentes. La primera es que una
+transacción fue incluida en un bloque, lo que se demuestra mediante una prueba de inclusión
+respecto de la raíz de transacciones del encabezado y exige recalcular hashes Keccak-256 sobre
+los nodos del árbol de Merkle-Patricia y sobre el propio encabezado. La segunda es que dicho
+bloque es auténtico y está finalizado según el consenso de la cadena de origen. La tercera es que
+la operación de bloqueo se ejecutó con éxito, ya que una transacción incluida en un bloque puede
+haber revertido su ejecución. La prueba de inclusión no establece por sí misma esta última
+propiedad, cuya demostración puede requerir evidencia adicional, como el recibo de la
+transacción, que registra su estado de ejecución y los eventos emitidos, junto con su inclusión
+respecto de la raíz de recibos del encabezado~\cite{wood2014ethereum, eip658}. La segunda
+afirmación, por su parte, no se reduce a la verificación de una firma. El protocolo de cliente
+ligero de Ethereum exige, además de verificar la firma agregada del comité de sincronización,
+comprobar el número de miembros participantes, el dominio de firma correspondiente a la versión
+del protocolo, la pertenencia del encabezado finalizado al estado certificado mediante una rama
+de Merkle y la continuidad del propio comité entre periodos~\cite{ethlightclient}. A partir de
+la actualización Capella, el protocolo incorpora además la vinculación entre el encabezado de
+consenso y el encabezado de ejecución que contiene las raíces
+mencionadas~\cite{ethlightclientcapella}. Entre estas
+comprobaciones, la verificación de la firma es la más costosa de expresar como circuito. Esta
+firma emplea la curva BLS12-381, cuyo cuerpo base
+tiene 381 bits y excede, por lo tanto, al cuerpo de 254 bits sobre el que opera el circuito, de
+manera que cada elemento debe representarse mediante varios valores del cuerpo y cada operación
+aritmética debe emularse. La implementación de referencia circom-pairing, desarrollada en el
+marco de un grupo de trabajo de 0xPARC, documenta que la verificación de una única firma BLS
+requiere aproximadamente 19,2 millones de restricciones no lineales, aproximadamente 3,2 horas de
+compilación y una clave de prueba de 12~GB en un servidor de 32 núcleos y 256~GB de
+memoria~\cite{circompairing}. Estas cifras, obtenidas sobre un hardware concreto, no constituyen
+una medición del presente trabajo, pero ilustran el orden de magnitud del costo que implica
+expresar verificaciones de consenso como circuitos aritméticos. La forma en que el puente
+desarrollado en este trabajo aborda cada una de las tres afirmaciones se expone en el
+Capítulo~\ref{chp:zkbridge}.
+
+Circom ofrece, en definitiva, un control preciso sobre las restricciones generadas, lo que
+permite optimizar manualmente los circuitos y conocer con exactitud la relación que se probará.
+Ese control tiene como contrapartida una mayor dificultad de desarrollo, ya que el programador
+debe razonar simultáneamente sobre el cálculo del testigo y sobre las ecuaciones que lo
+restringen, y asume la responsabilidad de que ambos coincidan. Noir, analizado en la
+Sección~\ref{sec:noir}, conserva el enfoque basado en circuitos, pero eleva el nivel de
+abstracción, de modo que el desarrollador describe la computación con construcciones más
+cercanas a las de un lenguaje de programación convencional y el compilador asume la generación de
+las restricciones correspondientes.
