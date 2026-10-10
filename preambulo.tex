@@ -62,6 +62,14 @@
 	morecomment=[s]{/*}{*/},
 	morestring=[b]"
 }
+\lstdefinelanguage{Noir}{
+	morekeywords={fn, pub, let, mut, assert, unconstrained, unsafe, if, else, for, in,
+		return, global, use, mod, struct, impl, Field, u8, u32, u64},
+	sensitive=true,
+	morecomment=[l]{//},
+	morecomment=[s]{/*}{*/},
+	morestring=[b]"
+}
 \lstset{
 	basicstyle=\ttfamily\small,
 	keywordstyle=\bfseries,

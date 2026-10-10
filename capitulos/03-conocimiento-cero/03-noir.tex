@@ -1,2 +1,425 @@
 \section{Noir}
 \label{sec:noir}
+
+La Sección~\ref{sec:circom} concluyó que Circom ofrece un control preciso sobre las restricciones
+a costa de exigir al desarrollador que razone simultáneamente sobre el cálculo del testigo y sobre
+las ecuaciones que lo restringen. Noir conserva el enfoque basado en circuitos descrito en la
+Sección~\ref{sec:computacion_prueba}, pero eleva el nivel de abstracción, ya que el desarrollador
+describe la computación con construcciones próximas a las de un lenguaje de programación
+convencional y el compilador asume la generación de las restricciones. Este cambio desplaza el
+trabajo de traducción hacia el compilador, pero no la responsabilidad de especificar
+correctamente la relación que se pretende demostrar. La presente sección describe el origen y
+los componentes de Noir, la forma de describir computaciones en el lenguaje, el proceso que
+conduce desde el código fuente hasta una prueba verificable en Ethereum mediante el backend
+Barretenberg y las limitaciones relevantes para un puente entre cadenas. Dado que varios de estos
+aspectos cambian entre versiones, la descripción corresponde a las utilizadas en el proyecto,
+Nargo~1.0.0-beta.22 y Barretenberg~5.0.0-nightly.20260522.
+
+% ---------------------------------------------------------------------------
+\subsection{Origen y propósito}
+\label{sec:noir_origen}
+
+Noir es un lenguaje de dominio específico, de código abierto, para escribir programas cuya
+ejecución correcta puede demostrarse mediante pruebas de conocimiento cero, desarrollado en el
+ecosistema de Aztec~\cite{noirlang, noirrepo}. Su documentación lo describe como un lenguaje
+influido por Rust~\cite{noirdocsbeta}, y su sintaxis adopta efectivamente construcciones de ese
+lenguaje, como la declaración de funciones con \lstinline|fn|, las ligaduras con \lstinline|let|
+o el sistema de módulos. Noir no es, sin embargo, un subconjunto de Rust. Posee un sistema de
+tipos propio, organizado alrededor del tipo \lstinline|Field|, impone restricciones que no
+existen en Rust, como el tamaño fijo de las entradas del programa principal, y no es compatible
+con las bibliotecas de ese ecosistema.
+
+En la cadena de herramientas de Noir conviene distinguir cinco elementos con funciones
+diferentes. El primero es el lenguaje y su compilador, que traduce el programa a una
+representación intermedia denominada ACIR, descrita en la Sección~\ref{sec:noir_flujo}. El
+segundo es Nargo, la herramienta de línea de órdenes que gestiona los proyectos y sus
+dependencias e invoca al compilador, al ejecutor y a las pruebas unitarias. El tercero
+corresponde a los componentes que calculan el testigo ejecutando la representación intermedia,
+disponibles tanto a través de Nargo como de la biblioteca \texttt{noir\_js}, que permite hacerlo
+desde JavaScript~\cite{noirjsnpm}. El cuarto es el backend de pruebas, en este caso Barretenberg,
+una biblioteca en C++ que se utiliza mediante la interfaz de línea de órdenes \texttt{bb} o
+mediante \texttt{bb.js}, su envoltorio para JavaScript y WebAssembly~\cite{barretenbergsrc,
+bbjsnpm}. El quinto es el sistema criptográfico que implementa ese backend, UltraHonk, cuyas
+características se describen en la Sección~\ref{sec:noir_flujo}.
+
+Esta separación sustenta la independencia de Noir respecto del backend, ya que el repositorio
+oficial declara que el lenguaje fue diseñado para utilizar cualquier sistema de prueba compatible
+con ACIR~\cite{noirrepo}. Dicha independencia tiene, no obstante, condiciones precisas. El backend
+debe interpretar todos los tipos de instrucciones de ACIR, incluidas las funciones de caja negra
+que la especificación delega en él~\cite{noirdocsbeta}. El tamaño del tipo \lstinline|Field|
+depende del cuerpo nativo del backend, por lo que un programa cuya corrección dependa del módulo
+no es trasladable sin revisión~\cite{noirdocsbeta}. Además, los formatos de los artefactos y de
+las pruebas están ligados a versiones concretas de las herramientas, motivo por el cual el
+proyecto exige utilizar pares de versiones de Nargo y Barretenberg que coincidan entre sí. La
+independencia se sitúa, por lo tanto, en el nivel del lenguaje y de la representación
+intermedia, y no implica que cualquier versión de cualquier herramienta pueda intercambiarse.
+
+El interés de Noir para el presente trabajo reside en la forma de representar la computación.
+La verificación de una prueba de inclusión sobre un árbol de Merkle-Patricia exige decodificar
+estructuras RLP, recorrer nodos y recalcular hashes Keccak-256, operaciones que en Noir pueden
+expresarse con funciones, ciclos acotados y arreglos, sin escribir manualmente cada restricción.
+Al mismo tiempo, Noir permanece dentro del enfoque basado en circuitos, de modo que el sistema
+resultante describe específicamente esa verificación, y Barretenberg permite generar
+verificadores en Solidity para comprobar las pruebas en Ethereum. Las consecuencias de estas
+características sobre el rendimiento no se anticipan en este capítulo, sino que forman parte de
+la comparación experimental del Capítulo~\ref{chp:zkbridge}.
+
+% ---------------------------------------------------------------------------
+\subsection{Descripción de computaciones y generación de restricciones}
+\label{sec:noir_descripcion}
+
+Un programa Noir se compone de funciones cuyos parámetros tienen tipos conocidos durante la
+compilación. Dentro de ellas, las ligaduras declaradas con \lstinline|let| son inmutables salvo
+que se indique \lstinline|mut|, las operaciones aritméticas se escriben con la notación habitual
+y la instrucción \lstinline|assert| establece una condición que toda ejecución válida debe
+satisfacer. La función \lstinline|main| es el punto de entrada del programa y sus parámetros
+deben tener un tamaño fijo, conocido durante la compilación~\cite{noirdocsbeta}.
+
+El tipo \lstinline|Field| representa un elemento del cuerpo nativo del backend, que en el caso de
+Barretenberg es un cuerpo primo de 254 bits~\cite{noirdocsbeta}. Su aritmética es la de
+$\mathbb{F}_p$ descrita en la Sección~\ref{sec:computacion_prueba}, por lo que el resultado se
+reduce módulo $p$ sin ninguna comprobación de desbordamiento. Los tipos enteros, como
+\lstinline|u8|, \lstinline|u32| o \lstinline|u64|, son en cambio valores del cuerpo restringidos a
+un rango~\cite{noirdocsbeta}. En una compilación realizada para el presente trabajo con
+Nargo~1.0.0-beta.22, una función que suma dos parámetros \lstinline|u8| dio lugar a
+restricciones de rango de 8 bits sobre cada parámetro y sobre el resultado de la suma, de modo
+que la ejecución con los valores $200$ y $100$ falló por desbordamiento, mientras que la suma de
+$p - 1$ y $1$ con el tipo \lstinline|Field| produjo $0$ sin error. En esta operación concreta, la suma
+sobre \lstinline|Field| evita las restricciones de rango y la comprobación de desbordamiento que
+requiere la suma de enteros, aunque exige al desarrollador garantizar que el comportamiento
+modular sea el previsto. El ejemplo no permite, sin embargo, concluir que \lstinline|Field| sea
+más económico en cualquier programa, ya que el costo final depende también de las operaciones
+posteriores, de las comprobaciones que la aplicación necesite y de las optimizaciones del
+backend. Los enteros, por su parte, incorporan automáticamente las restricciones necesarias para
+reproducir la aritmética de ancho fijo.
+
+La visibilidad se declara de forma explícita en la firma de la función principal. Sus
+parámetros son privados salvo que se marquen con \lstinline|pub|, en cuyo caso forman parte de
+las entradas públicas, y su valor de retorno, si existe, debe declararse obligatoriamente como
+público, ya que el compilador rechaza un tipo de retorno de \lstinline|main| sin \lstinline|pub|.
+A diferencia de Circom, donde las salidas del componente principal son siempre públicas y las
+entradas se hacen públicas mediante una lista en la declaración de \lstinline|main|
+(Sección~\ref{sec:circom_construccion}), en Noir la visibilidad se indica individualmente para
+cada parámetro.
+
+La Figura~\ref{fig:noir_cubico} muestra un programa que expresa la misma relación que el
+circuito de la Figura~\ref{fig:circom_cubico}, $y = w^{3} + w + 5$, con $w$ privado e $y$
+público. Se eligió una interfaz con una entrada pública comprobada mediante una aserción, en lugar
+de un valor de retorno público, porque reproduce el modo en que un contrato verificador recibe el
+valor público y lo contrasta con sus propios datos. Ambas formulaciones son válidas y en las dos
+el valor de $y$ forma parte del enunciado.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{minipage}{0.8\textwidth}
+		\begin{lstlisting}[language=Noir]
+// w: privado; y: publico
+fn main(w: Field, y: pub Field) {
+    assert(w * w * w + w + 5 == y);
+}
+\end{lstlisting}
+	\end{minipage}
+	\caption{Programa Noir que expresa la relación $w^{3} + w + 5 = y$.}
+	\label{fig:noir_cubico}
+\end{figure}
+
+En este programa, el probador aporta el valor privado $w$ y el valor público $y$, mientras que
+el enunciado contiene únicamente $y$. La prueba respalda que el probador conoce un $w$ tal que
+$w^{3} + w + 5 = y$ en $\mathbb{F}_p$, relación que, al tratarse del tipo \lstinline|Field|, se
+evalúa módulo $p$. El desarrollador no declaró valores intermedios, ya que es el compilador quien
+traduce la expresión a la representación intermedia. En la compilación realizada para el presente
+trabajo, el programa dio lugar a dos aserciones aritméticas, $w_2 = w_0 \cdot w_0$ y
+$w_1 = w_0 \cdot w_2 + w_0 + 5$, donde $w_0$ corresponde a $w$, $w_1$ a $y$ y $w_2$ es un valor
+intermedio introducido por el compilador, análogo a la señal $v_1$ del ejemplo de Circom. La
+ejecución con $w = 3$ e $y = 35$ produjo un testigo válido, mientras que con $y = 36$ falló porque
+la aserción no puede satisfacerse. La relación demostrada es matemáticamente equivalente a la del
+ejemplo de Circom, pero su representación no lo es. Noir no produce un sistema R1CS, sino la
+representación intermedia descrita a continuación, que el backend transforma a su vez en las
+restricciones de su propio sistema de prueba, por lo que el número de restricciones y el costo de
+ambos ejemplos no son comparables directamente.
+
+% ---------------------------------------------------------------------------
+\subsection{Compilación, cálculo del testigo y generación de la prueba}
+\label{sec:noir_flujo}
+
+El compilador de Noir produce un programa en \textbf{ACIR} (\textit{Abstract Circuit
+Intermediate Representation}), una representación intermedia diseñada para servir de enlace
+entre un lenguaje de alto nivel y un sistema de prueba, independiente de cualquier sistema
+concreto~\cite{noirrepo}. Un programa ACIR es una secuencia de instrucciones, denominadas
+\textit{opcodes}, que restringen un conjunto de valores llamados testigos. La instrucción más
+básica es una aserción sobre una expresión, entendida como la suma de términos lineales en los
+testigos, de términos formados por el producto de dos testigos y de un término constante. Una
+fila de R1CS relaciona el producto de dos combinaciones lineales con una tercera
+(Sección~\ref{sec:circom_construccion}), mientras que una expresión de ACIR puede contener varios
+términos de producto independientes. La restricción $e = a \cdot b + c \cdot d$, que no puede
+escribirse como el producto de dos combinaciones lineales y que el compilador de Circom rechaza,
+se compiló en Noir como una única aserción. ACIR incluye además llamadas a funciones de
+caja negra, cuya implementación se delega en el backend, operaciones sobre memoria y llamadas a
+código no restringido~\cite{noirrepo, noirdocsbeta}. Los testigos de ACIR se denominan
+\textit{parciales}, porque el backend puede introducir testigos y restricciones adicionales al
+construir su propio circuito, en particular al expandir las funciones de caja negra.
+
+La representación intermedia debe distinguirse de su ejecución. La \textbf{ACVM}
+(\textit{Abstract Circuit Virtual Machine}) es la máquina virtual que ejecuta un programa ACIR
+sobre las entradas proporcionadas por el usuario y obtiene el testigo parcial que el backend
+necesita para generar la prueba~\cite{noirrepo}. \textbf{Brillig}, por su parte, es un formato de
+código y una máquina virtual de propósito general destinados a ejecutar las funciones no
+restringidas de Noir. Cuando el programa ACIR contiene una llamada a código no restringido, la
+ACVM delega su ejecución en la máquina virtual de Brillig e incorpora los resultados al
+testigo~\cite{noirrepo}. Ni ACIR, ni la ACVM, ni Brillig constituyen un sistema criptográfico, ya
+que la generación y verificación de la prueba corresponde exclusivamente al backend.
+
+La Figura~\ref{fig:noir_flujo} representa el recorrido completo desde el código fuente hasta una
+prueba verificable, tal como se organiza con las herramientas utilizadas en el proyecto.
+
+La primera etapa es la compilación. Nargo compila el programa y produce un artefacto que
+contiene el código ACIR, el código Brillig de las funciones no restringidas y una descripción de
+la interfaz del programa principal, que indica el tipo y la visibilidad de cada entrada. La
+segunda etapa consiste en preparar las entradas concretas, ya sea en el archivo de configuración
+que utiliza Nargo o como un objeto de JavaScript cuando se emplea \texttt{noir\_js}, codificadas
+según esa interfaz. En la tercera etapa, la ACVM ejecuta el programa sobre esas entradas y obtiene
+el testigo, ya sea mediante la orden \lstinline|nargo execute| o mediante la función de ejecución
+de \texttt{noir\_js}~\cite{noirdocsbeta, noirjsnpm}. Si alguna aserción no puede satisfacerse, la
+ejecución falla y no se obtiene ningún testigo.
+
+La cuarta etapa corresponde a la preparación del backend. Barretenberg construye su propio
+circuito a partir del código ACIR, expandiendo las funciones de caja negra, y necesita una cadena
+de referencia común cuyo tamaño depende del tamaño del circuito. La clave de verificación se
+deriva del código ACIR y de esa cadena sin necesitar el testigo de una ejecución válida del
+programa. En la versión utilizada, \texttt{bb} construye el circuito para ese fin con valores
+auxiliares generados rápidamente y no válidos, que solo sirven para expandir las funciones de caja
+negra, de modo que la clave puede generarse una única vez por circuito, antes de cualquier
+operación concreta, y utilizarse para producir el contrato verificador en
+Solidity~\cite{barretenbergsrc}. Esta etapa no depende, por lo tanto, de
+la tercera, y ambas pueden realizarse de forma independiente. En la quinta etapa, el backend
+combina el código ACIR, el testigo y la cadena de referencia para generar la prueba $\pi$ junto
+con los valores de las entradas públicas, mediante la orden \lstinline|bb prove| o mediante la
+clase \texttt{UltraHonkBackend} de \texttt{bb.js}~\cite{barretenbergsrc, bbjsnpm}. Finalmente, la
+verificación puede realizarse con \texttt{bb}, con \texttt{bb.js} o mediante el contrato generado,
+que requiere los contratos precompilados de Ethereum para la suma, la multiplicación escalar y el
+emparejamiento sobre la curva BN254, así como el de exponenciación modular~\cite{barretenbergsrc}.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{tikzpicture}[
+		herramienta/.style = {draw, rounded corners, align=center, minimum height=1.1cm,
+			text width=2.2cm, font=\footnotesize},
+		artefacto/.style = {draw, dashed, align=center, minimum height=0.9cm,
+			text width=2.2cm, font=\footnotesize},
+		flecha/.style = {-{Stealth[length=2.5mm]}, thick},
+		dato/.style = {font=\footnotesize, align=center}
+	]
+		\node[artefacto] (fuente) at (0, 0) {Programa\\\texttt{main.nr}};
+		\node[herramienta] (compilador) at (2.65, 0) {Compilación\\(Nargo)};
+		\node[artefacto] (acir) at (5.3, 0) {Artefacto\\ACIR y ABI};
+		\node[herramienta] (vk) at (7.95, 1.6) {Clave de\\verificación (bb)};
+		\node[artefacto] (crs) at (5.3, 1.6) {CRS\\universal};
+		\node[artefacto] (sol) at (10.6, 1.6) {Verificador\\Solidity};
+		\node[herramienta] (exec) at (7.95, -1.6) {Ejecución ACVM\\(Nargo o noir\_js)};
+		\node[artefacto] (entradas) at (7.95, -3.3) {Entradas};
+		\node[artefacto] (testigo) at (10.6, -1.6) {Testigo};
+		\node[herramienta] (prove) at (13.25, -1.6) {Generación de\\la prueba (bb, bb.js)};
+		\node[herramienta] (verify) at (13.25, 1.6) {Verificación};
+
+		\draw[flecha] (fuente) -- (compilador);
+		\draw[flecha] (compilador) -- (acir);
+		\draw[flecha] (acir) -- (vk);
+		\draw[flecha] (crs) -- (vk);
+		\draw[flecha] (vk) -- (sol);
+		\draw[flecha] (acir) -- (exec);
+		\draw[flecha] (entradas) -- (exec);
+		\draw[flecha] (exec) -- (testigo);
+		\draw[flecha] (testigo) -- (prove);
+		\draw[flecha] (acir.south) -- ++(0, -3.9) -| node[below, dato, pos=0.25]
+			{ACIR} (prove.south);
+		\draw[flecha] (crs.north) -- ++(0, 0.6) -| node[above, dato, pos=0.25]
+			{CRS} ([xshift=0.8cm]verify.east |- prove.east) -- (prove.east);
+		\draw[flecha] (prove) -- node[left, dato] {$\pi$ y entradas\\públicas} (verify);
+		\draw[flecha] (sol) -- (verify);
+	\end{tikzpicture}
+	\caption{Proceso de compilación, cálculo del testigo, generación y verificación de una
+	prueba a partir de un programa Noir con el backend Barretenberg.}
+	\label{fig:noir_flujo}
+\end{figure}
+
+Según su documentación y su código fuente, el prototipo del puente distribuye estas herramientas
+en dos momentos. Nargo y la interfaz \texttt{bb} se emplean durante la preparación, para compilar
+el circuito y generar la clave de verificación y el contrato verificador. Durante cada operación
+del puente, en cambio, el servicio que genera las pruebas utiliza \texttt{noir\_js} para calcular
+el testigo y \texttt{bb.js} para generar la prueba, mientras que la verificación se realiza en la
+cadena de destino mediante el contrato generado. Los detalles de esta integración se describen
+en el Capítulo~\ref{chp:zkbridge}.
+
+El sistema de prueba que implementa Barretenberg en esta modalidad es \textbf{UltraHonk}, al que
+su documentación describe como un sistema de tipo PLONK más eficiente que su predecesor
+UltraPlonk~\cite{barretenbergdocs, barretenbergsrc}. Su aritmetización organiza el circuito como
+una tabla de ejecución con un número fijo de columnas, en la que cada fila representa una
+compuerta cuyo tipo se determina mediante polinomios selectores. Además de las compuertas
+aritméticas, la clave de verificación generada en la versión utilizada declara selectores para
+compuertas especializadas, entre ellas las de comprobación de rango, operaciones sobre curvas
+elípticas, accesos a memoria, aritmética sobre cuerpos no nativos y la función de hash
+Poseidon2. La igualdad entre valores de distintas filas se impone mediante restricciones de
+copia, como en PLONK~\cite{gabizon2019plonk}, y la pertenencia de ciertos valores a tablas
+precomputadas se comprueba mediante un argumento de búsqueda. Esta técnica fue introducida en
+este contexto por Plookup~\cite{gabizon2020plookup}, aunque la versión de Barretenberg utilizada
+implementa una variante basada en derivadas logarítmicas~\cite{habock2022logup, barretenbergsrc}. Estas
+\textbf{tablas de búsqueda} permiten verificar operaciones como las comprobaciones de rango o las
+operaciones bit a bit consultando una tabla, en lugar de descomponer cada valor en bits mediante
+restricciones aritméticas, como se describió para Circom en la Sección~\ref{sec:circom_limitaciones}.
+Las relaciones del circuito se verifican mediante el protocolo \textit{sumcheck}, que la
+documentación de Barretenberg incluye entre sus componentes con y sin conocimiento
+cero~\cite{barretenbergsrc}. Para el ejemplo de la Figura~\ref{fig:noir_cubico}, la herramienta
+\lstinline|bb gates| informó un circuito de 20 filas, cifra que incluye filas fijas del sistema y
+que ilustra que el número de instrucciones ACIR no coincide con el tamaño del circuito que
+finalmente se prueba.
+
+Tres propiedades de esta modalidad deben precisarse, porque no se aplican automáticamente a
+cualquier ejecución de Noir. En primer lugar, la variante destinada a Ethereum emplea compromisos
+KZG sobre la curva BN254~\cite{barretenbergsrc}, por lo que requiere una configuración confiable
+de tipo universal, en el sentido de la Sección~\ref{sec:snarks_starks}. Barretenberg obtiene la
+cadena de referencia de la ceremonia Ignition de Aztec, en la que participaron 176 personas e
+instituciones entre 2019 y 2020 y cuya seguridad requiere que al menos un participante haya
+destruido su aleatoriedad~\cite{ignition2020}. Los puntos necesarios se descargan cuando no están
+disponibles localmente y su integridad se comprueba mediante hashes~\cite{barretenbergsrc}. A
+diferencia del flujo de Groth16 descrito para Circom, no se requiere una fase específica para cada
+circuito. En segundo lugar, la propiedad de conocimiento cero depende de la variante elegida. El
+destino \lstinline|evm| de \texttt{bb} genera pruebas con conocimiento cero y utiliza Keccak como
+función de hash en la transformación de Fiat-Shamir, mientras que el destino
+\lstinline|evm-no-zk| prescinde de dicha propiedad~\cite{barretenbergsrc}. En tercer lugar, la
+verificación en Ethereum exige que la prueba, la clave de verificación y el contrato verificador
+se generen con el mismo destino. En una ejecución realizada para el presente trabajo con
+Barretenberg~5.0.0-nightly.20260522, la prueba del ejemplo con el destino \lstinline|evm| ocupó
+4544 bytes, un tamaño considerablemente mayor que el de una prueba Groth16, y fue verificada
+correctamente con \texttt{bb} y con \texttt{bb.js}.
+
+Esta descripción permite identificar intervalos de tiempo de naturaleza distinta. La
+compilación, la generación de la clave de verificación y del contrato verificador y el
+despliegue de este último constituyen una preparación que se realiza una vez por circuito. La
+descarga de la cadena de referencia y la inicialización del backend son costos de puesta en
+marcha que pueden presentarse solo en la primera operación. El cálculo del testigo, la generación
+de la prueba y su eventual verificación local se repiten en cada operación, mientras que la
+verificación en la cadena de destino forma parte de una transacción, cuyo costo se expresa en gas
+y cuya duración incluye la espera hasta su inclusión en un bloque. Estas etapas no tienen
+necesariamente un equivalente directo en SP1, por lo que su correspondencia se establece en la
+metodología del Capítulo~\ref{chp:zkbridge}.
+
+% ---------------------------------------------------------------------------
+\subsection{Limitaciones y consideraciones de seguridad}
+\label{sec:noir_limitaciones}
+
+La primera limitación se refiere a la diferencia entre elevar el nivel de abstracción y
+garantizar la corrección de la especificación. En el código restringido, el compilador genera
+las restricciones correspondientes a cada instrucción, de modo que el desarrollador no necesita
+escribir por separado el cálculo y la restricción de cada valor, como ocurre en Circom. Esta
+automatización no elimina, sin embargo, todos los riesgos de restricciones insuficientes. Los
+resultados del cálculo no restringido, descrito más adelante, requieren comprobaciones explícitas
+cuando intervienen en la relación demostrada, y la prueba sigue certificando únicamente lo que el
+programa expresa. Un programa que verifica la inclusión de una transacción respecto de una raíz
+suministrada como entrada establece solo esa inclusión, y no la autenticidad de la raíz, la
+finalidad del bloque ni el éxito de la operación, distinciones ya presentadas en la
+Sección~\ref{sec:circom_limitaciones}. Del mismo modo, una condición omitida en el programa no
+produce un error de compilación, sino una relación más débil que la prevista. Los errores de
+especificación de este tipo forman parte de las vulnerabilidades documentadas en sistemas basados
+en pruebas sucintas~\cite{chaliasos2024sok}, y el propio repositorio de Noir advierte que la
+implementación no ha sido auditada ni revisada para su uso en producción~\cite{noirrepo}.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{minipage}{0.8\textwidth}
+		\begin{lstlisting}[language=Noir]
+unconstrained fn inverse(x: Field) -> Field {
+    if x == 0 { 0 } else { 1 / x }
+}
+
+fn main(x: Field) -> pub Field {
+    // Safety: el resultado se restringe a continuacion
+    let inv = unsafe { inverse(x) };
+    assert(x * inv == 1);
+    inv
+}
+\end{lstlisting}
+	\end{minipage}
+	\caption{Cálculo no restringido de un inverso en Noir, seguido de la restricción que lo
+	valida.}
+	\label{fig:noir_unconstrained}
+\end{figure}
+
+Noir conserva, además, una forma de cálculo no restringido. Las funciones declaradas como
+\lstinline|unconstrained| se compilan a código Brillig y se ejecutan fuera del sistema de
+restricciones, de manera que sus resultados se incorporan al testigo sin que ninguna restricción
+los respalde~\cite{noirdocsbeta}. La documentación justifica este mecanismo porque ciertas
+operaciones resultan mucho más baratas de comprobar que de calcular dentro del circuito, y exige
+por ello que el programa añada las restricciones necesarias sobre sus resultados. La
+Figura~\ref{fig:noir_unconstrained} muestra este patrón para el cálculo de un inverso.
+
+El ejemplo presenta dos particularidades que conviene precisar. Cuando $x = 0$, la función
+auxiliar devuelve cero, pero la aserción $x \cdot \mathit{inv} = 1$ no puede satisfacerse, de modo
+que el programa completo solo acepta entradas no nulas. Además, el inverso se devuelve como valor
+público, y para una entrada no nula basta con invertirlo para recuperar $x$, por lo que la
+declaración de $x$ como privada no mantiene su valor en secreto. Esto no contradice la propiedad
+de conocimiento cero (Sección~\ref{sec:propiedades_zk}), que garantiza que la prueba no revela
+información sobre el testigo más allá de la validez del enunciado, pero no oculta lo que puede
+deducirse de los propios valores públicos.
+
+La semejanza con el operador \lstinline|<--| de Circom se limita a que, en ambos casos, un valor
+entra en el testigo sin quedar restringido por la operación que lo calcula. Las diferencias son
+relevantes. Una función no restringida de Noir puede contener una computación completa, con
+ciclos y bifurcaciones, ejecutada por la máquina virtual de Brillig, y no una única asignación.
+Además, el lenguaje exige que su invocación desde código restringido se realice dentro de un
+bloque \lstinline|unsafe|, cuya ausencia produce un error de compilación, y la versión utilizada
+advierte cuando ese bloque carece de un comentario que justifique su seguridad. En una
+compilación realizada para el presente trabajo, la eliminación de la aserción de la
+Figura~\ref{fig:noir_unconstrained} produjo un diagnóstico que indicaba que los resultados de la
+llamada no estaban suficientemente restringidos, aunque el programa se compiló y ejecutó de todos
+modos. Este diagnóstico, como las comprobaciones de Circom, identifica patrones conocidos, pero no
+sustituye una revisión del programa.
+
+La vinculación entre los datos públicos y la relación demostrada constituye una segunda
+consideración. Como se señaló en la Sección~\ref{sec:computacion_prueba}, la garantía de la prueba
+alcanza únicamente a los valores que forman parte del enunciado, de modo que, si un contrato
+acuña activos a favor de un destinatario y por un monto determinados, ambos valores deben formar
+parte de las entradas públicas o estar vinculados criptográficamente a un valor público que el
+contrato compruebe. En el primer caso, el contrato compara directamente las entradas públicas con
+los parámetros de su propia llamada. En el segundo, el enunciado puede contener, por ejemplo, el
+hash de una codificación inequívoca de esos datos, de modo que el circuito restringe la relación
+entre el hash y los valores, y el contrato calcula el mismo hash a partir de los parámetros de su
+llamada y lo compara con la entrada pública. La interfaz concreta del prototipo se describe en el
+Capítulo~\ref{chp:zkbridge}. En cualquier caso, la codificación de las entradas públicas debe
+conocerse con precisión. En la versión utilizada, por ejemplo,
+un arreglo público de $n$ elementos \lstinline|u8| se expone como $n$ entradas públicas, cada una
+restringida a 8 bits, por lo que el contrato debe reconstruir los valores a partir de esa
+representación.
+
+Las restricciones sobre el control de flujo y el tamaño de los datos derivan del enfoque basado en
+circuitos. En el código restringido, el número de iteraciones de cada ciclo debe conocerse durante
+la compilación, y las instrucciones para interrumpir un ciclo solo se admiten en código no
+restringido~\cite{noirdocsbeta}. Los parámetros del programa principal deben tener un tamaño fijo,
+por lo que datos de longitud variable, como una transacción codificada en RLP o los nodos de una
+prueba de Merkle-Patricia, deben representarse mediante arreglos de un tamaño máximo acompañados
+de su longitud efectiva. El circuito incluye, en consecuencia, las restricciones correspondientes
+al tamaño máximo con independencia de la longitud real de los datos.
+
+El costo de los hashes binarios y de la aritmética sobre cuerpos no nativos tampoco desaparece
+con el cambio de lenguaje. Noir ofrece algunas de estas operaciones como funciones de caja negra,
+entre ellas la permutación de Keccak, la compresión de SHA-256 y las operaciones bit a bit, cuya
+implementación se delega en el backend para que este utilice restricciones optimizadas cuando
+dispone de ellas~\cite{noirdocsbeta}. La función Keccak-256 completa, en cambio, no forma parte
+de la biblioteca estándar de la versión utilizada y debe construirse sobre esa permutación o
+tomarse de bibliotecas externas~\cite{noirdocsbeta}. Las tablas de búsqueda reducen el costo de
+las comprobaciones de rango y de las operaciones bit a bit, pero no eliminan el costo de emular la
+aritmética de un cuerpo de mayor tamaño, como el de 381 bits de la curva BLS12-381 que emplea la
+firma del comité de sincronización de Ethereum, cuyos elementos deben seguir representándose
+mediante varios valores del cuerpo nativo.
+
+Por último, los costos de un programa Noir dependen del backend, de sus parámetros y de las
+versiones utilizadas. El número de instrucciones ACIR no determina por sí solo el tamaño del
+circuito, que depende de la forma en que el backend expande cada instrucción, y ese tamaño
+condiciona a su vez la cantidad de puntos de la cadena de referencia y la memoria necesarios para
+generar la prueba. Un cambio de versión de Nargo o de Barretenberg puede modificar la
+representación intermedia, el circuito resultante o el formato de las pruebas, por lo que
+cualquier medición debe asociarse a las versiones con que se obtuvo.
+
+Noir permite describir la verificación como un programa, pero cada programa sigue dando lugar a
+un circuito específico. La Sección~\ref{sec:sp1} estudia el enfoque alternativo presentado en la
+Sección~\ref{sec:computacion_prueba}, en el que se demuestra la ejecución de un programa
+arbitrario sobre una máquina virtual de conocimiento cero.
