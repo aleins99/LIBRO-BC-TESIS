@@ -134,58 +134,35 @@ resulta secundario cuando los datos que se prueban son públicos.
 \label{sec:interactivas}
 
 En el modelo original de Goldwasser, Micali y Rackoff, probador y verificador intercambian
-varios mensajes antes de que el verificador tome su decisión~\cite{goldwasser1989knowledge}. El
-verificador envía \textit{desafíos} elegidos al azar, y la solidez se apoya en que el probador
-no puede anticiparlos. Este tipo de protocolos se denomina \textbf{interactivo} y presenta
-limitaciones importantes para su uso en una red blockchain. La interacción requiere que ambas
-partes participen sucesivamente en cada ronda, aunque no necesariamente mediante una conexión
-simultánea, y debe repetirse con cada verificador. Además, la transcripción resultante no
-constituye, en general, una prueba verificable por terceros, ya que estos no pueden comprobar
-que los desafíos se eligieron al azar y no en acuerdo con el probador. En un protocolo de
-conocimiento cero, de hecho, todo lo que observa el verificador podría haberse generado sin
-conocer el testigo (Sección~\ref{sec:propiedades_zk}), aunque la transferibilidad de una
-transcripción depende, en última instancia, del protocolo concreto. En el caso de un contrato inteligente, que se ejecuta de manera
-determinista como respuesta a cada transacción, un protocolo de varias rondas podría
-implementarse mediante una secuencia de transacciones, pero a costa de gas adicional, de
-latencia entre rondas, de la necesidad de conservar estado entre transacciones y de la
-dificultad de obtener desafíos aleatorios que el probador no pueda manipular, lo que incrementa
-además la complejidad de la implementación.
+varios mensajes antes de que el verificador tome su decisión~\cite{goldwasser1989knowledge}. En
+estos protocolos, denominados \textbf{interactivos}, el verificador envía \textit{desafíos}
+elegidos al azar, y la solidez se apoya en que el probador no puede anticiparlos. En una red
+blockchain, un contrato inteligente podría ejecutar un protocolo de varias rondas mediante una
+secuencia de transacciones, pero cada ronda añadiría costo en gas y latencia, y el contrato
+necesitaría obtener desafíos aleatorios que el probador no pudiera manipular.
 
-Una prueba \textbf{no interactiva} consiste, en cambio, en un único mensaje $\pi$ que el
-probador genera por sí solo y que cualquier parte puede verificar en cualquier momento. Blum,
+Una prueba \textbf{no interactiva} consiste, en cambio, en un único mensaje $\pi$ que cualquier
+parte puede verificar en cualquier momento, sin nuevos intercambios con el probador. Blum,
 Feldman y Micali demostraron que este tipo de pruebas es posible cuando ambas partes comparten
-ciertos parámetros públicos generados de antemano mediante un procedimiento denominado
-\textbf{configuración inicial} (\textit{setup})~\cite{blum1988noninteractive}. Si ese
-procedimiento emplea valores secretos que deben destruirse, porque su conocimiento permitiría
-generar pruebas falsas, se habla de una \textbf{configuración confiable}
-(\textit{trusted setup}). Si solo emplea aleatoriedad pública, la configuración se denomina
-\textbf{transparente}. Esta distinción es una de las diferencias principales entre las familias
-de sistemas presentadas en la Sección~\ref{sec:snarks_starks}.
+parámetros públicos generados de antemano mediante una \textbf{configuración inicial}
+(\textit{setup})~\cite{blum1988noninteractive}. Si ese procedimiento emplea valores secretos que
+deben destruirse, porque su conocimiento permitiría generar pruebas falsas, se habla de una
+\textbf{configuración confiable} (\textit{trusted setup}). Si solo emplea aleatoriedad pública,
+se denomina \textbf{transparente}. La configuración confiable no es, por lo tanto, un requisito
+de toda prueba no interactiva, y esta distinción es una de las diferencias principales entre las
+familias de sistemas presentadas en la Sección~\ref{sec:snarks_starks}.
 
 La técnica más difundida para eliminar la interacción es la \textbf{transformación de
-Fiat-Shamir}~\cite{fiat1987prove}, aplicable a protocolos de \textit{desafíos públicos}, es
-decir, aquellos en los que el verificador se limita a enviar valores aleatorios. La
-transformación reemplaza cada desafío por el hash de la transcripción previa, que debe incluir
-el enunciado público y los mensajes enviados hasta ese momento por el probador. Un probador
-deshonesto puede, sin embargo, calcular el hash de distintos mensajes candidatos antes de elegir
-cuál enviar, en busca de uno que le proporcione un desafío favorable, estrategia conocida como
-ataque de búsqueda (\textit{grinding}). La seguridad de la transformación suele analizarse en el
-modelo de oráculo aleatorio, que idealiza la función de hash como una función perfectamente
-aleatoria~\cite{bellare1993random}, y en ese modelo el éxito de dicha búsqueda no depende
-únicamente del tamaño del espacio de desafíos, sino también de la solidez del protocolo
-original, de sus parámetros y del número de evaluaciones de hash que el adversario puede
-realizar. Thaler ilustra este punto señalando que, si el protocolo original ofrece solo 60 bits
-de seguridad, unas $2^{60}$ evaluaciones de hash bastan para encontrar un mensaje favorable,
-cantidad alcanzable con hardware actual, y recomienda configurar el protocolo con un margen
-holgadamente superior a 80 bits~\cite[Sección~5.3]{thaler2022proofs}. Por estos motivos, la
-transformación no resulta automáticamente segura para cualquier protocolo ni para cualquier
-forma de construir la transcripción. Omitir el enunciado
-del cálculo del desafío, por ejemplo, ha dado lugar a ataques
-documentados~\cite{bernhard2012pitfalls}. Aplicada correctamente, la transformación permite
-generar la prueba sin intervención del verificador. Una prueba así obtenida puede incluirse en una transacción y
-ser verificada tanto por un contrato inteligente como por cualquier nodo que valide el bloque,
-lo que la convierte en un objeto persistente y verificable públicamente.
-
+Fiat-Shamir}~\cite{fiat1987prove}, aplicable a protocolos de \textit{desafíos públicos}, en los
+que el verificador se limita a enviar valores aleatorios. La transformación sustituye cada
+desafío por el hash de la transcripción previa, cuyo cálculo debe vincular el enunciado público
+y los mensajes previos del probador, ya que omitir el enunciado ha dado lugar a ataques
+documentados~\cite{bernhard2012pitfalls}. Aunque suele analizarse en el modelo de oráculo
+aleatorio, que idealiza la función de hash~\cite{bellare1993random}, la transformación no es
+segura de forma automática, puesto que su seguridad depende del protocolo de partida, de sus
+parámetros y de la construcción de la transcripción~\cite[Sección~5.3]{thaler2022proofs}.
+Aplicada correctamente, permite generar la prueba sin intervención del verificador, de modo que
+esta puede incluirse en una transacción y ser verificada por un contrato inteligente.
 % ---------------------------------------------------------------------------
 \subsection{De una computación a una prueba}
 \label{sec:computacion_prueba}
