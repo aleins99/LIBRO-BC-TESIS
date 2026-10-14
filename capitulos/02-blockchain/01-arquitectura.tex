@@ -123,9 +123,11 @@ mismos recursos:
 	particular en su raíz de Merkle y, en redes PoS, en la firma del comité que certifica su
 	finalidad— para verificar de forma eficiente si una transacción específica fue incluida,
 	mediante una prueba de inclusión como la descrita en la Sección~\ref{sec:merkle}. Este es
-	precisamente el modelo de confianza que adopta el \textit{relayer} \textit{off-chain} del
-	puente diseñado en este trabajo: no re-ejecuta la cadena de origen, sino que verifica una
-	prueba de inclusión respaldada por la firma del comité de sincronización de Ethereum.
+	precisamente el modelo de confianza que adopta el puente diseñado en este trabajo, cuyos
+	contratos en la cadena de destino no reejecutan la cadena de origen, sino que verifican pruebas
+	de conocimiento cero de la firma del comité de sincronización de Ethereum sobre un bloque y de
+	la inclusión de la transacción en ese bloque. El \textit{relayer} \textit{off-chain} se limita
+	a generar dichas pruebas y a remitirlas a esos contratos.
 \end{itemize}
 
 Todos estos roles se comunican mediante una red \textit{peer-to-peer} de propagación por

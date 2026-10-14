@@ -70,6 +70,14 @@
 	morecomment=[s]{/*}{*/},
 	morestring=[b]"
 }
+\lstdefinelanguage{Rust}{
+	morekeywords={fn, pub, let, mut, use, const, match, if, else, for, in, return, impl,
+		struct, enum, mod, as, unsafe, Some, None, Ok, Err, u32, u64},
+	sensitive=true,
+	morecomment=[l]{//},
+	morecomment=[s]{/*}{*/},
+	morestring=[b]"
+}
 \lstset{
 	basicstyle=\ttfamily\small,
 	keywordstyle=\bfseries,
