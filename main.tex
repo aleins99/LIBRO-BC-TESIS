@@ -2,6 +2,10 @@
 \input{metadata}
 \input{preambulo}
 
+% -- Apartado PENDIENTES: \pendientesfalse lo oculta en la versión final --
+\newif\ifpendientes
+\pendientestrue
+
 \begin{document}
 
 \frontmatter
@@ -71,6 +75,7 @@
 \input{capitulos/02-blockchain/04-puentes.tex}
 
 \chapter{CONOCIMIENTO CERO}
+\label{chp:conocimiento_cero}
 \input{capitulos/03-conocimiento-cero/01-fundamentos.tex}
 \input{capitulos/03-conocimiento-cero/02-circom.tex}
 \input{capitulos/03-conocimiento-cero/03-noir.tex}
@@ -113,6 +118,15 @@
 \addcontentsline{toc}{chapter}{APÉNDICE}
 \renewcommand{\thechapter}{A}
 \input{anexos/apendice.tex}
+
+% ----------------
+% -- PENDIENTES --
+% ----------------
+\ifpendientes
+\chapter*{PENDIENTES}
+\addcontentsline{toc}{chapter}{PENDIENTES}
+\input{anexos/pendientes.tex}
+\fi
 
 % -----------------------
 % -- ÍNDICE ALFABÉTICO --

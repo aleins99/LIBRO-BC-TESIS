@@ -1,1 +1,264 @@
-\section{Aztec (Estructura de bloques)}
+\section{Aztec}
+\label{sec:aztec}
+
+Aztec es una red de capa 2 (\textit{Layer 2}) construida sobre Ethereum cuyo objetivo principal es
+ofrecer contratos inteligentes con estado y ejecución privados~\cite{aztecdocs}. Su desarrollo
+está a cargo de Aztec Labs, la misma organización que creó el lenguaje Noir y el sistema de
+pruebas Barretenberg descritos en la Sección~\ref{sec:noir}. La red principal de Aztec, denominada
+\textit{Ignition Chain}, comenzó a producir bloques sobre Ethereum en noviembre de
+2025~\cite{theblock2025aztec}. El estudio de Aztec resulta pertinente para este trabajo por dos
+razones. En primer lugar, constituye el entorno para el cual se concibieron las herramientas de
+Noir, de modo que su arquitectura explica muchas de las decisiones de diseño de ese lenguaje. En
+segundo lugar, Aztec es un sistema en el que la validez de las transiciones de estado de una
+cadena se certifica ante otra mediante una prueba de conocimiento cero verificada por un contrato
+inteligente, que es precisamente el principio sobre el que se construye el puente propuesto. La
+presente sección describe el modelo de \textit{rollup} en el que se inscribe Aztec, su
+representación del estado, la estructura de sus bloques, sus mecanismos de consenso y el
+protocolo de mensajería que lo comunica con Ethereum.
+
+\subsection{Rollups y pruebas de validez}
+\label{sec:aztec_rollups}
+
+Un \textbf{rollup} es una cadena que ejecuta transacciones fuera de una cadena principal, a la
+que se denomina capa 1, y publica en ella tanto los datos necesarios para reconstruir su estado
+como un compromiso sobre el estado resultante. La capa 1 actúa así como fuente de verdad y como
+garante de la disponibilidad de los datos, mientras que el cómputo se realiza fuera de ella. Los
+rollups se clasifican según el mecanismo con el que la capa 1 llega a aceptar un nuevo estado.
+
+En los \textbf{rollups optimistas}, los nuevos estados se publican sin demostración y se presumen
+válidos, salvo que algún participante presente una \textit{prueba de fraude} durante un período
+de impugnación, que en las implementaciones habituales se extiende por siete días. Optimism,
+cuya red de prueba Optimism Sepolia actúa como cadena de destino en este trabajo, pertenece a esta
+categoría~\cite{optimismfaultproofs}. En los \textbf{rollups de validez}, también llamados
+\textit{zk-rollups}, cada nuevo estado se acompaña de una prueba sucinta de que resulta de aplicar
+correctamente las reglas del protocolo a un conjunto de transacciones, y un contrato verificador
+desplegado en la capa 1 solo acepta el nuevo estado si la prueba es válida. Esta segunda
+categoría elimina el período de impugnación y reemplaza la suposición de que algún participante
+honesto vigila la cadena por una garantía criptográfica. Aztec pertenece a la categoría de
+rollups de validez y añade a ella una propiedad que los demás rollups no ofrecen, que es la
+posibilidad de ocultar a los propios operadores de la red el contenido de las transacciones
+privadas~\cite{aztecdocs}.
+
+\subsection{Estado privado y estado público}
+\label{sec:aztec_estado}
+
+A diferencia de Ethereum, cuyo estado es enteramente público, Aztec mantiene dos clases de estado
+con modelos de datos distintos~\cite{aztecstate}. El \textbf{estado público} funciona de manera
+análoga al de Ethereum, ya que cada contrato dispone de posiciones de almacenamiento cuyos valores
+son visibles para todos los participantes y pueden ser modificados directamente por la ejecución
+pública. El \textbf{estado privado}, en cambio, se representa mediante un modelo de salidas no
+gastadas semejante al de Bitcoin, en el que la unidad de información es la \textit{nota}.
+
+\begin{definition}
+	\label{def:nota}
+	Una \textbf{nota} es un registro cifrado que contiene una porción del estado privado de un
+	contrato, como el saldo de un token perteneciente a un usuario. La red no almacena la nota,
+	sino un compromiso criptográfico sobre ella, denominado \textbf{hash de nota}, que se calcula a
+	partir de su contenido, su propietario, la posición de almacenamiento a la que pertenece, la
+	dirección del contrato y un valor aleatorio. Solo el propietario de la nota conoce su
+	contenido y puede descifrarla.
+\end{definition}
+
+Puesto que modificar un valor existente revelaría qué registro se actualizó, el estado privado
+nunca se modifica ni se elimina. Para consumir una nota, su propietario publica un
+\textbf{anulador} (\textit{nullifier}), que es un valor derivado de la nota y de una clave secreta
+del propietario, calculado de forma que ningún observador pueda vincularlo con el hash de nota
+correspondiente. Una transferencia privada consiste, en consecuencia, en anular las notas del
+emisor y crear notas nuevas para el receptor y para el cambio, de manera similar al uso de dinero
+en efectivo. La red rechaza toda transacción que intente publicar un anulador ya existente, lo que
+impide gastar dos veces la misma nota sin necesidad de identificarla~\cite{aztecstate}.
+
+Aztec adopta, además, la abstracción de cuentas de forma nativa. Toda cuenta es un contrato
+inteligente que define sus propias reglas de autorización, de modo que el esquema de firma, la
+gestión del \textit{nonce} y la forma de pago de las tarifas quedan a criterio de quien
+programa la cuenta~\cite{aztecdocs}. Por ejemplo, una cuenta puede verificar firmas ECDSA sobre la
+curva secp256k1, que es la misma que emplea Ethereum, u otro esquema distinto.
+
+\subsection{Árboles de estado}
+\label{sec:aztec_arboles}
+
+El estado de Aztec se organiza en cinco árboles de Merkle binarios, cuyas raíces conforman el
+compromiso sobre el estado global de la red. A diferencia de Ethereum, que anida un árbol de
+almacenamiento dentro de cada cuenta (Sección~\ref{sec:eth_mpt}), Aztec almacena los valores
+directamente como hojas de árboles globales~\cite{aztecstate}. Los árboles emplean funciones de
+hash algebraicas, como Poseidon2, que se expresan como circuito con un número de restricciones muy
+inferior al de Keccak-256 o SHA-256. La Tabla~\ref{tab:aztec_arboles} resume su función y su
+altura, según los parámetros vigentes del protocolo~\cite{aztecconstants}.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Árboles de estado de Aztec.}
+	\label{tab:aztec_arboles}
+	\small
+	\begin{tabular}{>{\raggedright\arraybackslash}p{3.8cm} >{\raggedright\arraybackslash}p{8.6cm} >{\centering\arraybackslash}p{1.4cm}}
+		\toprule
+		\textbf{Árbol} & \textbf{Contenido} & \textbf{Altura} \\
+		\midrule
+		Árbol de hashes de nota & Compromisos sobre las notas del estado privado. Solo admite
+		inserciones al final. & 42 \\
+		\addlinespace
+		Árbol de anuladores & Anuladores publicados, organizados como árbol de Merkle indexado. & 42 \\
+		\addlinespace
+		Árbol de datos públicos & Valores del almacenamiento público de todos los contratos. & 40 \\
+		\addlinespace
+		Árbol de mensajes de L1 a L2 & Mensajes enviados desde Ethereum hacia Aztec. & 36 \\
+		\addlinespace
+		Árbol de archivo & Hashes de los encabezados de todos los bloques anteriores. & 30 \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+El árbol de anuladores plantea un requisito particular. Para insertar un anulador, la red debe
+demostrar que este no existe previamente en el árbol, lo cual exige una \textit{prueba de no
+pertenencia}. Un árbol de Merkle disperso, en el que cada valor posible ocupa la hoja de índice
+igual a dicho valor, permitiría esta prueba de forma directa, pero requeriría una profundidad de
+254 niveles para cubrir los elementos del cuerpo de la curva BN254, con el consiguiente costo en
+restricciones. Aztec resuelve este problema con un \textbf{árbol de Merkle
+indexado}~\cite{aztecindexedtree}, en el que cada hoja almacena una terna
+$(v, i_{\mathrm{sig}}, v_{\mathrm{sig}})$ formada por el valor $v$, el índice $i_{\mathrm{sig}}$ de
+la hoja que contiene el siguiente valor mayor y dicho valor $v_{\mathrm{sig}}$. Las hojas forman,
+así, una lista enlazada ordenada. Para demostrar que un valor $x$ no pertenece al árbol basta con
+exhibir la pertenencia de la hoja que lo precede, denominada \textit{anulador inferior}, y
+comprobar que $v < x < v_{\mathrm{sig}}$, o bien que $v < x$ y $v_{\mathrm{sig}} = 0$ cuando $x$
+es mayor que todos los valores almacenados. Como la posición de una hoja ya no depende de su
+valor, una profundidad moderada es suficiente.
+
+El \textbf{árbol de archivo} cumple una función semejante a la del encadenamiento por hash
+descrito en la Sección~\ref{sec:arquitectura_blockchain}. Al almacenar el hash de cada
+encabezado, permite demostrar dentro de un circuito, con una prueba de inclusión logarítmica, que
+un bloque anterior forma parte de la historia de la cadena.
+
+\subsection{Ejecución de transacciones y estructura de bloques}
+\label{sec:aztec_bloques}
+
+La ejecución de una transacción en Aztec se divide en una fase privada y una fase
+pública~\cite{aztectransactions}. La fase privada se ejecuta en el dispositivo del usuario,
+dentro de un componente denominado PXE (\textit{Private eXecution Environment}), que almacena las
+claves y las notas del usuario, ejecuta las funciones privadas de los contratos y genera las
+pruebas correspondientes. Cada llamada a una función privada es procesada por el \textbf{circuito
+de núcleo privado} (\textit{private kernel}), que verifica la prueba de la función, comprueba el
+contexto de la llamada y acumula sus efectos, es decir, los hashes de nota, los anuladores, los
+mensajes hacia Ethereum y las llamadas públicas pendientes~\cite{aztecprivatekernel}. Este
+circuito se aplica de forma recursiva, una vez por llamada, y concluye con una prueba única que
+certifica toda la ejecución privada de la transacción. Es el único circuito del protocolo que
+requiere efectivamente la propiedad de conocimiento cero, puesto que debe ocultar qué contrato y
+qué función se ejecutaron, quién es el usuario y cuáles fueron las entradas y salidas. Los
+restantes circuitos utilizan pruebas sucintas para comprimir la verificación, pero no necesitan
+ocultar sus testigos.
+
+El usuario envía a la red la prueba de la fase privada junto con sus efectos. La fase pública,
+que comprende las funciones públicas encoladas por la fase privada, se ejecuta posteriormente en
+los nodos de la red mediante la AVM (\textit{Aztec Virtual Machine}), una máquina virtual
+conceptualmente análoga a la EVM, cuya ejecución también se demuestra mediante una prueba. El
+costo de las transacciones se mide en \textit{mana}, unidad equivalente al gas de Ethereum
+(Sección~\ref{sec:eth_gas}), que se desglosa en un componente de ejecución y otro de
+disponibilidad de datos, y cuyo precio se determina mediante un mecanismo inspirado en
+EIP-1559~\cite{aztecfees}.
+
+El encabezado de un bloque de Aztec contiene la raíz del árbol de archivo antes del bloque, las
+raíces de los árboles de hashes de nota, de anuladores, de datos públicos y de mensajes de L1 a
+L2 tras su ejecución, un conjunto de variables globales que incluye el identificador de la
+cadena, el número de bloque, el número de \textit{slot}, la marca de tiempo y los precios del
+mana, y los totales de tarifas y de mana consumidos~\cite{aztecconstants}. Los bloques se agrupan
+en \textit{checkpoints}, que son las unidades que se publican en Ethereum, y estos a su vez en
+\textit{épocas} de hasta 32 checkpoints.
+
+La validez de una época completa se demuestra mediante una única prueba, construida por los
+\textbf{circuitos de rollup} a partir de un árbol binario de pruebas~\cite{aztecrollupcircuits}.
+En el nivel inferior, un circuito base verifica la prueba de cada transacción y actualiza los
+árboles de estado. Los niveles superiores fusionan recursivamente pares de pruebas, primero en
+pruebas de bloque, luego de checkpoint y finalmente en la prueba raíz de la época, cuyas entradas
+públicas incluyen las raíces del árbol de archivo anterior y posterior. Esta topología permite
+distribuir la generación de las pruebas entre numerosos probadores que trabajan en paralelo. La
+prueba raíz se verifica en el contrato de rollup desplegado en Ethereum, de modo que el costo de
+verificación en la capa 1 es independiente del número de transacciones incluidas en la época. La
+Figura~\ref{fig:aztec_ciclo} resume el recorrido de una transacción desde el dispositivo del
+usuario hasta su asentamiento en Ethereum.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{tikzpicture}[
+		node distance=0.55cm,
+		caja/.style={draw, rounded corners=2pt, align=center, minimum width=8.2cm,
+			minimum height=0.95cm, font=\small},
+		flecha/.style={-{Stealth[length=2.2mm]}, thick},
+		etiqueta/.style={font=\footnotesize\itshape, align=left, anchor=west}
+		]
+		\node[caja] (pxe) {PXE del usuario\\
+			(ejecución privada y núcleo privado)};
+		\node[caja, below=of pxe] (secuenciador) {Secuenciador y comité\\
+			(ejecución pública en la AVM y atestación del bloque)};
+		\node[caja, below=of secuenciador] (l1datos) {Contrato de rollup en Ethereum\\
+			(publicación del checkpoint y sus datos)};
+		\node[caja, below=of l1datos] (probadores) {Probadores\\
+			(circuitos de rollup y prueba raíz de la época)};
+		\node[caja, below=of probadores] (l1prueba) {Contrato de rollup en Ethereum\\
+			(verificación de la prueba y asentamiento)};
+
+		\draw[flecha] (pxe) -- (secuenciador)
+			node[etiqueta, midway, xshift=4.25cm] {prueba privada y efectos};
+		\draw[flecha] (secuenciador) -- (l1datos)
+			node[etiqueta, midway, xshift=4.25cm] {checkpoint atestiguado};
+		\draw[flecha] (l1datos) -- (probadores)
+			node[etiqueta, midway, xshift=4.25cm] {época concluida};
+		\draw[flecha] (probadores) -- (l1prueba)
+			node[etiqueta, midway, xshift=4.25cm] {prueba de validez};
+	\end{tikzpicture}
+	\caption{Recorrido de una transacción de Aztec desde su ejecución en el dispositivo del
+	usuario hasta su asentamiento en Ethereum.}
+	\label{fig:aztec_ciclo}
+\end{figure}
+
+\subsection{Secuenciadores, probadores y finalidad}
+\label{sec:aztec_consenso}
+
+La producción de bloques en Aztec está a cargo de \textbf{secuenciadores}, que son participantes
+que depositan una garantía de 200\,000 tokens AZTEC para integrar el conjunto de validadores de la
+red~\cite{aztecoperators}. En cada slot, se selecciona de forma pseudoaleatoria un proponente a
+partir de la aleatoriedad provista por Ethereum, y un comité de secuenciadores reejecuta las
+transacciones propuestas y firma atestaciones si las considera válidas~\cite{aztecblocks}. Un
+bloque solo se acepta si reúne las atestaciones de al menos dos tercios más uno de los miembros
+del comité, y la publicación de un bloque sin ese respaldo constituye una falta sancionable con
+la pérdida de parte de la garantía.
+
+Las atestaciones proporcionan una confirmación provisional, pero no constituyen la garantía
+definitiva. Una vez concluida una época, los \textbf{probadores} generan la prueba de validez de
+todos sus bloques y la remiten al contrato de rollup, que la verifica y actualiza el estado
+asentado. Si ninguna prueba válida llega dentro del plazo previsto, los bloques no demostrados se
+descartan y sus transacciones deben volver a proponerse~\cite{aztecblocks}. La seguridad de las
+transiciones de estado asentadas en Ethereum descansa, por lo tanto, en la validez de la prueba y
+no en la honestidad del comité, cuyo papel se limita a ordenar las transacciones y a garantizar la
+disponibilidad de los datos.
+
+\subsection{Mensajería entre Ethereum y Aztec}
+\label{sec:aztec_mensajeria}
+
+Las aplicaciones de Aztec se comunican con Ethereum mediante un protocolo de mensajes asíncronos.
+El extremo de una aplicación en Ethereum se denomina \textbf{portal}, y es un contrato inteligente
+vinculado a una dirección específica de Aztec~\cite{aztecmessaging}. Los mensajes desde Ethereum
+hacia Aztec se depositan en un contrato denominado \textit{Inbox}, que almacena únicamente un
+compromiso de cada mensaje. Al procesar el checkpoint siguiente, los circuitos de rollup insertan
+esos mensajes en el árbol de mensajes de L1 a L2, y un contrato de Aztec puede consumirlos
+demostrando su pertenencia a dicho árbol y publicando un anulador que impide consumirlos dos
+veces. En sentido inverso, los mensajes que emite una transacción de Aztec quedan disponibles en
+un contrato denominado \textit{Outbox} una vez que la prueba de la época que los contiene ha sido
+verificada en Ethereum, momento a partir del cual el portal correspondiente puede consumirlos.
+
+Este protocolo permite construir puentes de activos del tipo \textit{lock-and-mint} sin
+intermediarios de confianza. El propio protocolo incluye uno de ellos, el contrato
+\texttt{FeeJuicePortal}, que bloquea en Ethereum los tokens destinados al pago de tarifas y envía
+un mensaje al contrato correspondiente de Aztec, que acredita el saldo al destinatario cuando este
+presenta el secreto asociado al depósito~\cite{aztecfees}. La acuñación en Aztec no depende de un
+\textit{relayer}, sino de que el mensaje figure en un árbol cuya raíz ha sido establecida por los
+circuitos de rollup y verificada en Ethereum, y la liberación de fondos en Ethereum depende, a su
+vez, de una prueba de validez aceptada por el contrato de rollup.
+
+Esta garantía es posible porque Aztec y Ethereum comparten un contrato de asentamiento, ya que es
+Ethereum quien verifica las pruebas de Aztec y, por ende, conoce con certeza su estado. Dos
+cadenas independientes, como Ethereum Sepolia y Optimism Sepolia, no disponen de un mecanismo
+equivalente, puesto que ninguna verifica de forma nativa el consenso de la otra. El puente
+desarrollado en este trabajo traslada el principio de los rollups de validez a este escenario,
+reemplazando la verificación de la prueba de un rollup por la verificación de una prueba de
+conocimiento cero sobre la firma del comité de sincronización de Ethereum y sobre la inclusión del
+evento de bloqueo, según la cadena de compromisos descrita en la
+Sección~\ref{sec:eth_cadena_verificacion}.

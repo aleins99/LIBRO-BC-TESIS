@@ -29,7 +29,7 @@ La \textbf{blockchain} propiamente dicha es la secuencia de bloques $B_0, B_1, \
 donde $B_0$ es el \textit{bloque génesis} y cada bloque $B_i$, con $i > 0$, referencia a su
 predecesor incluyendo $H(B_{i-1})$ en su propio encabezado, siendo $H$ una función de hash
 criptográfica (típicamente SHA-256 o Keccak-256). Esta construcción encadenada es lo que le da
-su nombre a la estructura y es la responsable directa de su inmutabilidad: como el hash de un
+su nombre a la estructura y es la responsable directa de su inmutabilidad. Como el hash de un
 bloque depende del hash del bloque anterior, alterar el contenido de $B_i$ cambia su hash
 $H(B_i)$, lo que invalida la referencia almacenada en $B_{i+1}$, y por extensión la de todos
 los bloques posteriores hasta la cabeza de la cadena. Un atacante que quisiera modificar una

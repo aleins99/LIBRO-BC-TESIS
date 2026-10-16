@@ -1,2 +1,448 @@
-\section{Ethereum (Estructura de bloques)}
+\section{Ethereum}
 \label{sec:ethereum}
+
+Ethereum es una plataforma \textit{blockchain} propuesta por Buterin en
+2014~\cite{buterin2014ethereum} y especificada formalmente por Wood en el denominado
+\textit{Yellow Paper}~\cite{wood2014ethereum}. A diferencia de Bitcoin, cuyo lenguaje de
+\textit{scripts} se limita deliberadamente a la validación de transferencias, Ethereum incorpora
+una máquina virtual capaz de ejecutar programas arbitrarios, denominados \textit{contratos
+inteligentes} (\textit{smart contracts}), cuyo código y estado forman parte del propio registro.
+Esta capacidad convierte a la cadena en una máquina de estados replicada de propósito general y
+es la que permite desplegar en ella la lógica de un puente entre cadenas. La presente sección
+describe el modelo de estado de Ethereum, la estructura de sus bloques, los árboles que resumen
+su contenido y el mecanismo de consenso que certifica su finalidad, con especial atención a los
+elementos que el puente desarrollado en este trabajo debe verificar.
+
+\subsection{Modelo de cuentas y máquina virtual}
+\label{sec:eth_cuentas}
+
+Ethereum adopta un modelo basado en cuentas, en contraposición al modelo de salidas no gastadas
+(UTXO) de Bitcoin. El \textbf{estado global} $\sigma$ es una correspondencia entre direcciones de
+160 bits y estados de cuenta, y cada cuenta se describe mediante cuatro campos, que son el
+\textit{nonce}, el saldo expresado en wei, la raíz del árbol que almacena su espacio de
+almacenamiento persistente (\textit{storageRoot}) y el hash de su código ejecutable
+(\textit{codeHash})~\cite{wood2014ethereum}. Se distinguen dos clases de cuentas. Las
+\textit{cuentas de propiedad externa} (\textit{externally owned accounts}) están controladas por
+una clave privada y carecen de código, mientras que las \textit{cuentas de contrato} carecen de
+clave privada y se rigen exclusivamente por el código que tienen asociado.
+
+Una transacción es una instrucción firmada por una cuenta de propiedad externa que transfiere
+valor, invoca una función de un contrato o despliega un contrato nuevo. Su aplicación sobre el
+estado se describe mediante una función de transición $\sigma_{t+1} = \Upsilon(\sigma_t, T)$,
+donde $T$ denota la transacción y $\Upsilon$ la función de transición de estado definida en el
+\textit{Yellow Paper}. La ejecución de contratos tiene lugar en la \textbf{Ethereum Virtual
+Machine} (EVM), una máquina de pila con palabras de 256 bits cuyo comportamiento es
+completamente determinista, de modo que todos los nodos que procesan la misma secuencia de
+transacciones obtienen el mismo estado resultante. El costo de dicha ejecución se mide en
+\textit{gas}, concepto que se desarrolla en la Sección~\ref{sec:eth_gas}.
+
+Los contratos pueden emitir \textbf{eventos} (\textit{logs}) durante su ejecución. Un evento
+consta de la dirección del contrato emisor, una lista de hasta cuatro \textit{tópicos} de
+32 bytes, el primero de los cuales identifica habitualmente la firma del evento, y un campo de
+datos de longitud arbitraria. Los eventos no forman parte del estado ni pueden ser leídos por
+otros contratos, pero quedan registrados de forma permanente en el recibo de la transacción que
+los originó. Este mecanismo es el que utiliza el contrato de bloqueo del puente para dejar
+constancia verificable de cada depósito realizado en la cadena de origen.
+
+\subsection{Gas y costo de ejecución}
+\label{sec:eth_gas}
+
+Una máquina virtual capaz de ejecutar programas arbitrarios enfrenta el problema de que no es
+posible determinar de antemano si un programa concluirá, lo que constituye una consecuencia del
+problema de la detención. Si la red ejecutara sin restricción cualquier código recibido, un único
+contrato con un ciclo infinito bastaría para detener a todos los nodos. Ethereum resuelve este
+problema asociando un costo a cada operación que realiza la EVM~\cite{wood2014ethereum}.
+
+\begin{definition}
+	\label{def:gas}
+	El \textbf{gas} es la unidad que mide el esfuerzo computacional requerido para ejecutar una
+	transacción en la EVM. Cada instrucción tiene asignado un costo fijo en gas, proporcional a
+	los recursos de cómputo, memoria y almacenamiento que consume, y toda transacción declara un
+	\textbf{límite de gas} $g_{\mathrm{lim}}$, que es la cantidad máxima de gas que su emisor
+	está dispuesto a consumir. El gas efectivamente consumido durante la ejecución se denota
+	$g_{\mathrm{usado}}$ y satisface $g_{\mathrm{usado}} \leq g_{\mathrm{lim}}$.
+\end{definition}
+
+El gas es independiente del precio de la moneda nativa. La cantidad de gas que requiere una
+operación depende exclusivamente de su complejidad, mientras que el precio que se paga por cada
+unidad de gas se determina por la demanda de espacio en los bloques. Toda transacción consume un
+costo intrínseco de 21\,000 unidades, al que se suma el costo de cada instrucción ejecutada. Las
+operaciones aritméticas elementales cuestan pocas unidades, mientras que las que modifican el
+almacenamiento persistente se encuentran entre las más costosas, puesto que su efecto debe ser
+conservado por todos los nodos de la red. Los precios se expresan habitualmente en
+\textit{gwei}, equivalente a $10^{9}$~wei, siendo un ether igual a $10^{18}$~wei.
+
+Desde la propuesta EIP-1559, el precio por unidad de gas se compone de dos partes~\cite{eip1559}.
+La primera es la \textbf{tarifa base} $p_{\mathrm{base}}$, que el protocolo fija para cada
+bloque y que se destruye en lugar de transferirse a algún participante. La segunda es la
+\textbf{propina} $p_{\mathrm{prop}}$, que se transfiere al validador que propone el bloque y
+actúa como incentivo para que incluya la transacción. Al enviar una transacción, el emisor no
+fija estos valores directamente, sino que declara un precio máximo por unidad de gas
+$p_{\max}$ y una propina máxima $p^{\mathrm{prop}}_{\max}$. La propina efectiva y el costo
+total de la transacción quedan determinados por las expresiones
+\begin{equation}
+	\label{eq:gas_propina}
+	p_{\mathrm{prop}} = \min\bigl(p^{\mathrm{prop}}_{\max},\; p_{\max} - p_{\mathrm{base}}\bigr),
+\end{equation}
+\begin{equation}
+	\label{eq:gas_costo}
+	\mathit{costo} = g_{\mathrm{usado}} \cdot \bigl(p_{\mathrm{base}} + p_{\mathrm{prop}}\bigr).
+\end{equation}
+Una transacción solo es válida si $p_{\max} \geq p_{\mathrm{base}}$. Antes de ejecutarla, el
+protocolo descuenta del saldo del emisor la cantidad $g_{\mathrm{lim}} \cdot p_{\max}$, que
+representa el costo máximo posible, y una vez concluida la ejecución reintegra la diferencia
+entre dicha reserva y el costo de la Ecuación~\eqref{eq:gas_costo}. La
+Figura~\ref{fig:eth_gas_costo} representa esta distribución como un área, en la que el eje
+horizontal corresponde a la cantidad de gas y el eje vertical al precio por unidad.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{tikzpicture}[
+		x=1cm, y=1cm,
+		eje/.style={-{Stealth[length=2.2mm]}, thick},
+		marca/.style={font=\footnotesize},
+		region/.style={font=\footnotesize, align=center}
+		]
+		% Dimensiones: g_lim = 10, g_usado = 6.5, p_base = 2.4, p_base + p_prop = 3.3, p_max = 4.6
+		\fill[gray!55] (0,0) rectangle (6.5,2.4);
+		\fill[gray!25] (0,2.4) rectangle (6.5,3.3);
+		\fill[gray!6] (6.5,0) rectangle (10,4.6);
+		\fill[gray!6] (0,3.3) rectangle (6.5,4.6);
+		\draw[thick] (0,0) rectangle (10,4.6);
+		\draw[dashed] (6.5,0) -- (6.5,4.6);
+		\draw (0,2.4) -- (6.5,2.4);
+		\draw (0,3.3) -- (6.5,3.3);
+
+		\node[region] at (3.25,1.2) {Tarifa base\\ $g_{\mathrm{usado}} \cdot p_{\mathrm{base}}$\\
+			(se destruye)};
+		\node[region] at (3.25,2.85) {Propina $g_{\mathrm{usado}} \cdot p_{\mathrm{prop}}$
+			(al proponente)};
+		\node[region] at (8.25,2.3) {Reintegro\\ al emisor};
+		\node[region] at (3.25,3.95) {Reintegro al emisor};
+
+		\draw[eje] (0,0) -- (10.8,0) node[below, marca] {gas};
+		\draw[eje] (0,0) -- (0,5.3) node[left, marca, align=right] {precio por\\ unidad de gas};
+
+		\draw (6.5,0) -- (6.5,-0.1) node[below, marca] {$g_{\mathrm{usado}}$};
+		\draw (10,0) -- (10,-0.1) node[below, marca] {$g_{\mathrm{lim}}$};
+		\node[below left, marca] at (0,0) {$0$};
+		\draw (0,2.4) -- (-0.1,2.4) node[left, marca] {$p_{\mathrm{base}}$};
+		\draw (0,3.3) -- (-0.1,3.3) node[left, marca] {$p_{\mathrm{base}} + p_{\mathrm{prop}}$};
+		\draw (0,4.6) -- (-0.1,4.6) node[left, marca] {$p_{\max}$};
+	\end{tikzpicture}
+	\caption[Distribución del pago de una transacción según EIP-1559.]{Distribución del pago de una transacción según la propuesta EIP-1559. El rectángulo
+	completo corresponde a la reserva inicial $g_{\mathrm{lim}} \cdot p_{\max}$.}
+	\label{fig:eth_gas_costo}
+\end{figure}
+
+La tarifa base se ajusta automáticamente de un bloque a otro en función de la congestión de la
+red. Cada bloque tiene un límite de gas total y un \textit{objetivo} $g_{\mathrm{obj}}$
+equivalente a la mitad de dicho límite. Si el gas consumido por un bloque $g_{\mathrm{bloque}}$
+supera el objetivo, la tarifa base del bloque siguiente aumenta, y si es inferior, disminuye,
+según la regla
+\begin{equation}
+	\label{eq:gas_base}
+	p'_{\mathrm{base}} = p_{\mathrm{base}} \left(1 + \frac{1}{8} \cdot
+	\frac{g_{\mathrm{bloque}} - g_{\mathrm{obj}}}{g_{\mathrm{obj}}}\right),
+\end{equation}
+de modo que la variación entre dos bloques consecutivos no excede el 12,5\,\%~\cite{eip1559}.
+Este mecanismo hace que el costo de una misma operación, expresado en ether, varíe con la
+demanda, aunque su consumo de gas permanezca constante. Por esta razón, el costo de verificación
+\textit{on-chain} se reporta en este trabajo en unidades de gas, que constituyen una medida
+reproducible e independiente de las condiciones del mercado.
+
+Si durante la ejecución el gas consumido alcanza el límite declarado, la EVM detiene la
+ejecución con una excepción de \textit{gas agotado} (\textit{out of gas}). En ese caso, todas las
+modificaciones del estado realizadas por la transacción se revierten, pero el gas consumido no se
+reintegra, ya que el trabajo de los nodos que la procesaron ya fue realizado. La transacción
+queda igualmente incluida en el bloque y su recibo registra el fallo mediante el código de
+estado descrito en la Sección~\ref{sec:eth_mpt}. Este comportamiento impide que un emisor obtenga
+cómputo gratuito de la red y garantiza que toda ejecución concluya en una cantidad finita de
+pasos.
+
+Además del conjunto ordinario de instrucciones, la EVM dispone de \textit{contratos
+precompilados}, que son direcciones reservadas cuya funcionalidad se implementa de forma nativa
+en el cliente y se cobra a un costo de gas muy inferior al que tendría la misma operación
+programada con instrucciones ordinarias. Entre ellos se encuentran la suma, la multiplicación
+escalar y la comprobación de emparejamientos sobre la curva BN254, incorporadas mediante las
+propuestas EIP-196 y EIP-197~\cite{eip196, eip197}. La propuesta EIP-1108 redujo
+posteriormente su costo, de modo que la comprobación de un producto de $k$ emparejamientos
+requiere $34\,000 \cdot k + 45\,000$ unidades de gas~\cite{eip1108}. Para una prueba Groth16,
+cuya verificación involucra cuatro emparejamientos, esta comprobación cuesta 181\,000 unidades de
+gas, cifra a la que se añaden las operaciones necesarias para procesar las entradas públicas.
+Estas operaciones son las que hacen económicamente viable verificar dentro de un contrato
+inteligente una prueba de conocimiento cero de tipo SNARK, aspecto que se desarrolla en el
+Capítulo~\ref{chp:conocimiento_cero}. Para la curva BLS12-381, empleada por el consenso de
+Ethereum, la propuesta EIP-2537 incorporó precompilados análogos recién en la actualización
+Pectra de 2025~\cite{eip2537}. Su disponibilidad no está garantizada en otras cadenas que
+pudieran actuar como destino de un puente y, aun con ellos, la verificación completa de una
+actualización del comité de sincronización conserva un costo elevado, según se expone en la
+Sección~\ref{sec:eth_cadena_verificacion}.
+
+\subsection{Arquitectura en dos capas}
+\label{sec:eth_capas}
+
+Desde su lanzamiento en 2015 y hasta septiembre de 2022, Ethereum utilizó un mecanismo de
+consenso de tipo \textit{Proof-of-Work}. La actualización conocida como \textit{The Merge},
+especificada en la propuesta EIP-3675, sustituyó dicho mecanismo por un consenso de tipo
+\textit{Proof-of-Stake} provisto por la \textit{Beacon Chain}, una cadena que operaba en
+paralelo desde diciembre de 2020~\cite{eip3675}. Como consecuencia de esta transición, cada nodo
+de Ethereum se compone actualmente de dos clientes que cooperan entre sí. El \textbf{cliente de
+ejecución} mantiene el estado global, ejecuta las transacciones en la EVM y construye los bloques
+de ejecución, mientras que el \textbf{cliente de consenso} gestiona el conjunto de validadores,
+determina quién propone cada bloque y decide qué bloques se consideran finalizados.
+
+Esta separación se refleja en la estructura de los datos. Cada bloque de la \textit{Beacon
+Chain} contiene, dentro de su cuerpo, un \textit{execution payload} que corresponde al bloque de
+ejecución tradicional~\cite{ethconsensusphase0}. En consecuencia, la autenticidad de un bloque
+de ejecución no se deriva de una prueba de trabajo, sino de su inclusión en un bloque de consenso
+que los validadores han atestiguado. Ambas capas emplean, además, funciones de hash distintas. La
+capa de ejecución utiliza Keccak-256 y la codificación RLP (\textit{Recursive Length Prefix}),
+mientras que la capa de consenso utiliza SHA-256 y la serialización SSZ (\textit{Simple
+Serialize}), cuya función \texttt{hash\_tree\_root} organiza los campos de cada estructura en un
+árbol de Merkle binario~\cite{sszspec}. Un verificador que pretenda enlazar ambas capas debe, por
+lo tanto, calcular los dos tipos de hash.
+
+\subsection{Estructura del bloque de ejecución}
+\label{sec:eth_bloque}
+
+El encabezado de un bloque de ejecución agrupa los compromisos criptográficos sobre el estado y
+el contenido del bloque, junto con los metadatos necesarios para validarlo. Su identificador,
+denominado \textit{block hash}, es el hash Keccak-256 de la codificación RLP del encabezado
+completo. La Tabla~\ref{tab:eth_header} resume los campos más relevantes para este trabajo.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Campos principales del encabezado de un bloque de ejecución de Ethereum.}
+	\label{tab:eth_header}
+	\small
+	\begin{tabular}{>{\raggedright\arraybackslash}p{3.6cm} >{\raggedright\arraybackslash}p{10.6cm}}
+		\toprule
+		\textbf{Campo} & \textbf{Descripción} \\
+		\midrule
+		\texttt{parentHash} & Hash Keccak-256 del encabezado del bloque predecesor. \\
+		\addlinespace
+		\texttt{beneficiary} & Dirección que recibe las propinas de las transacciones del bloque. \\
+		\addlinespace
+		\texttt{stateRoot} & Raíz del árbol de estado tras ejecutar todas las transacciones del
+		bloque. \\
+		\addlinespace
+		\texttt{transactionsRoot} & Raíz del árbol que contiene las transacciones del bloque. \\
+		\addlinespace
+		\texttt{receiptsRoot} & Raíz del árbol que contiene los recibos de dichas transacciones. \\
+		\addlinespace
+		\texttt{logsBloom} & Filtro de Bloom de 2048 bits sobre las direcciones y tópicos de los
+		eventos emitidos. \\
+		\addlinespace
+		\texttt{number} & Altura del bloque, es decir, cantidad de bloques que lo preceden. \\
+		\addlinespace
+		\texttt{gasLimit}, \texttt{gasUsed} & Límite de gas admitido por el bloque y gas
+		efectivamente consumido. \\
+		\addlinespace
+		\texttt{timestamp} & Marca de tiempo Unix del bloque. \\
+		\addlinespace
+		\texttt{prevRandao} & Valor pseudoaleatorio aportado por la capa de consenso, que reemplaza
+		al antiguo \texttt{mixHash}~\cite{eip4399}. \\
+		\addlinespace
+		\texttt{baseFeePerGas} & Tarifa base por unidad de gas vigente en el bloque~\cite{eip1559}. \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+Tras \textit{The Merge}, los campos asociados a la prueba de trabajo, como la dificultad y el
+\textit{nonce}, se mantienen en el encabezado con valores constantes a fin de preservar la
+compatibilidad del formato~\cite{eip3675}. Las actualizaciones posteriores del protocolo
+añadieron campos nuevos, entre ellos la raíz del bloque de consenso predecesor
+(\texttt{parentBeaconBlockRoot}), que permite a los contratos de la propia cadena acceder a los
+compromisos de la capa de consenso~\cite{eip4788}. Del conjunto de campos descritos, el puente
+desarrollado en este trabajo se apoya principalmente en \texttt{receiptsRoot}, puesto que es el
+compromiso que permite demostrar que una transacción de bloqueo se ejecutó con éxito y emitió el
+evento correspondiente.
+
+\subsection{Árboles de Merkle-Patricia}
+\label{sec:eth_mpt}
+
+Los compromisos del encabezado no se construyen con árboles de Merkle binarios como los descritos
+en la Sección~\ref{sec:merkle}, sino con \textbf{árboles de Merkle-Patricia}
+(\textit{Merkle-Patricia tries}), una estructura que combina un árbol de prefijos
+(\textit{Patricia trie}) con el direccionamiento por hash propio de los árboles de
+Merkle~\cite{wood2014ethereum}. Las claves se interpretan como secuencias de \textit{nibbles} de
+4 bits y cada nodo pertenece a uno de tres tipos. Un \textit{nodo rama} contiene dieciséis
+referencias, una por cada valor posible del siguiente \textit{nibble}, además de un valor
+opcional. Un \textit{nodo extensión} comprime un tramo de la clave compartido por todos sus
+descendientes, y un \textit{nodo hoja} almacena el sufijo restante de la clave junto con el valor
+asociado. Cada nodo se codifica en RLP y es referenciado por su padre mediante el hash
+Keccak-256 de dicha codificación, salvo cuando esta ocupa menos de 32 bytes, en cuyo caso se
+incrusta directamente. De esta forma, la raíz del árbol constituye un compromiso sobre el
+conjunto completo de pares clave-valor.
+
+Ethereum mantiene cuatro clases de árboles de este tipo. El \textbf{árbol de estado} asocia el
+hash Keccak-256 de cada dirección con el estado de la cuenta correspondiente. Cada cuenta de
+contrato posee, a su vez, un \textbf{árbol de almacenamiento} cuya raíz figura en su campo
+\textit{storageRoot}. Los \textbf{árboles de transacciones} y \textbf{de recibos} se construyen
+por bloque y utilizan como clave la codificación RLP del índice de cada transacción dentro del
+bloque. Mientras que el árbol de estado persiste y se actualiza de un bloque a otro, los dos
+últimos se reconstruyen para cada bloque y solo su raíz queda registrada en el encabezado.
+
+Una prueba de inclusión en un árbol de Merkle-Patricia consiste en la secuencia de nodos que
+recorre el camino desde la raíz hasta la hoja que contiene el valor buscado. El verificador
+comprueba que el hash de cada nodo coincide con la referencia almacenada en su predecesor y que
+los \textit{nibbles} consumidos a lo largo del recorrido reproducen la clave esperada. La
+longitud de la prueba crece de forma logarítmica con el número de elementos del árbol, aunque
+cada nodo rama puede ocupar hasta 532 bytes, lo que hace que estas pruebas sean
+considerablemente más extensas que las de un árbol binario. Su verificación exige, además,
+decodificar RLP y calcular Keccak-256, operaciones que resultan costosas de expresar como
+circuito, según se analiza en la Sección~\ref{sec:circom_limitaciones}.
+
+El \textbf{recibo} de una transacción registra el resultado de su ejecución. Contiene un código
+de estado que indica si la ejecución concluyó con éxito o fue revertida~\cite{eip658}, el gas
+acumulado consumido en el bloque hasta esa transacción, un filtro de Bloom y la lista de eventos
+emitidos. La distinción entre la inclusión de una transacción y su ejecución exitosa es
+relevante para un puente, ya que una transacción revertida figura igualmente en el árbol de
+transacciones a pesar de no haber modificado el estado. Por esta razón, la prueba que necesita el
+puente no se refiere al árbol de transacciones, sino al árbol de recibos, en el que el código de
+estado y el evento de bloqueo pueden comprobarse de manera conjunta.
+
+\subsection{Consenso y finalidad}
+\label{sec:eth_consenso}
+
+El consenso de Ethereum, denominado Gasper, combina una regla de selección de bifurcación
+derivada de GHOST, que determina la cabeza de la cadena en cada instante, con el mecanismo de
+finalidad Casper FFG (\textit{Friendly Finality Gadget})~\cite{buterin2020gasper,
+buterin2017casper}. El tiempo se divide en \textit{slots} de 12 segundos, en cada uno de los
+cuales un validador seleccionado de forma pseudoaleatoria puede proponer un bloque, y los slots
+se agrupan en \textit{épocas} de 32 slots, equivalentes a 6,4 minutos~\cite{ethconsensusphase0}.
+Para participar como validador es necesario depositar 32 ETH en garantía, y durante cada época
+todos los validadores activos se distribuyen en comités que emiten \textit{atestaciones} sobre
+la cabeza de la cadena y sobre el primer bloque de la época, llamado \textit{punto de control}
+(\textit{checkpoint}).
+
+Casper FFG opera sobre estos puntos de control. Cuando validadores que representan al menos dos
+tercios del saldo total en garantía atestiguan un enlace entre un punto de control justificado y
+otro posterior, este último pasa a estar \textit{justificado}, y cuando dos puntos de control
+consecutivos quedan justificados, el primero de ellos se considera \textit{finalizado}. En
+condiciones normales, un bloque alcanza la finalidad tras aproximadamente dos épocas, es decir,
+cerca de 12,8 minutos. El protocolo garantiza que revertir un bloque finalizado exige que al menos
+un tercio de los validadores firme mensajes contradictorios, conducta que es detectable y se
+sanciona con la pérdida de su garantía~\cite{buterin2017casper}. Esta propiedad, conocida como
+\textit{seguridad económica}, es la que permite tratar un bloque finalizado como irreversible
+salvo un costo económico de gran magnitud.
+
+El encabezado de un bloque de consenso es una estructura compacta que contiene el slot, el
+índice del validador proponente, la raíz del bloque predecesor (\texttt{parent\_root}), la raíz
+del estado de consenso (\texttt{state\_root}) y la raíz del cuerpo del bloque
+(\texttt{body\_root})~\cite{ethconsensusphase0}. Puesto que el \textit{execution payload} forma
+parte del cuerpo, cualquier campo del bloque de ejecución, incluido \texttt{receiptsRoot}, puede
+vincularse con el encabezado de consenso mediante una prueba de Merkle SSZ respecto de
+\texttt{body\_root}.
+
+\subsection{Comité de sincronización y clientes ligeros}
+\label{sec:eth_sync_committee}
+
+Verificar la finalidad a partir de las atestaciones individuales exigiría conocer el conjunto
+completo de validadores, que supera el millón de participantes, y procesar sus firmas en cada
+época. Para hacer posible la existencia de clientes ligeros, la actualización Altair introdujo el
+\textbf{comité de sincronización} (\textit{sync committee})~\cite{ethconsensusaltair}. Se trata
+de un subconjunto $\mathcal{C}$ de 512 validadores, seleccionados de forma pseudoaleatoria y
+ponderada por su saldo, que permanece fijo durante un \textit{período} de 256 épocas,
+aproximadamente 27 horas. En cada slot, los miembros del comité firman la raíz del encabezado de
+consenso del slot anterior, y las firmas se agregan en una única estructura
+\texttt{sync\_aggregate} que se incluye en el bloque siguiente. Esta estructura contiene un
+vector de 512 bits que indica qué miembros participaron y la firma agregada correspondiente.
+
+Las firmas utilizan el esquema BLS~\cite{boneh2001short} sobre la curva BLS12-381, en el que las
+claves públicas son elementos del grupo $\mathbb{G}_1$ y las firmas son elementos del grupo
+$\mathbb{G}_2$. La principal propiedad de este esquema es la agregación, pues las firmas de
+varios participantes sobre un mismo mensaje $m$ pueden combinarse en una sola mediante la suma
+de puntos de la curva, y su verificación se reduce a comprobar una única igualdad de
+emparejamientos. Si $\mathit{pk}_i$ denota la clave pública del miembro $i$ y $\mathit{sig}$ la
+firma agregada, la verificación consiste en calcular la clave agregada y comprobar la ecuación
+\begin{equation}
+	\label{eq:bls_agregada}
+	e\bigl(g_1, \mathit{sig}\bigr) = e\Bigl(\mathit{pk}_{\mathrm{agg}},\, H_{\mathbb{G}_2}(m)\Bigr),
+	\qquad \mathit{pk}_{\mathrm{agg}} = \sum_{i \in \mathcal{C}' } \mathit{pk}_i,
+\end{equation}
+donde $\mathcal{C}' \subseteq \mathcal{C}$ es el conjunto de miembros que participaron, $g_1$ es
+el generador de $\mathbb{G}_1$, $H_{\mathbb{G}_2}$ es una función de hash que transforma mensajes
+en puntos de $\mathbb{G}_2$ y $e\colon \mathbb{G}_1 \times \mathbb{G}_2 \to \mathbb{G}_T$ es el
+emparejamiento bilineal de la curva. El mensaje $m$ no es directamente la raíz del encabezado,
+sino su combinación con un \textit{dominio de firma} que incorpora la versión del protocolo y la
+raíz de los validadores del bloque génesis, lo que impide reutilizar una firma en otra red o en
+otro contexto.
+
+El protocolo de cliente ligero especifica cómo un nodo que solo conoce el comité vigente puede
+avanzar de forma segura~\cite{ethlightclient}. Una actualización (\textit{light client update})
+contiene el encabezado atestiguado, el agregado de firmas del comité, el encabezado finalizado
+junto con una prueba de Merkle de su pertenencia al estado de consenso y, en el último tramo de
+cada período, el comité siguiente acompañado de su propia prueba de pertenencia. El cliente
+acepta un nuevo encabezado finalizado cuando al menos dos tercios de los miembros del comité han
+firmado y todas las pruebas de Merkle son válidas. Desde la actualización Capella, el encabezado
+del cliente ligero incluye también el encabezado del bloque de ejecución y una prueba de su
+pertenencia a \texttt{body\_root}, lo que permite obtener la raíz de recibos sin descargar el
+bloque completo~\cite{ethlightclientcapella}.
+
+Conviene precisar que el modelo de confianza del comité de sincronización es distinto del de la
+finalidad plena. El cliente ligero no comprueba que dos tercios del total de validadores hayan
+atestiguado el bloque, sino que confía en que la mayoría de los 512 miembros del comité actúe
+honestamente, ya que el protocolo no contempla sanciones para quienes firman encabezados
+incorrectos en este rol. Dado que los miembros se seleccionan de forma aleatoria entre todos los
+validadores, la probabilidad de que un adversario controle una supermayoría del comité sin
+controlar una fracción comparable del conjunto total es despreciable. Este supuesto es el mismo
+que adoptan los clientes ligeros de Ethereum y constituye la raíz de confianza del puente
+desarrollado en este trabajo.
+
+\subsection{Cadena de verificación para el puente}
+\label{sec:eth_cadena_verificacion}
+
+Los elementos descritos en esta sección permiten construir una cadena de compromisos
+criptográficos que vincula un evento emitido por un contrato con la firma del comité de
+sincronización, como se ilustra en la Figura~\ref{fig:eth_cadena_confianza}. El punto de partida
+es un comité conocido, cuya firma agregada certifica la raíz de un encabezado de consenso
+finalizado. Desde ese encabezado, una prueba de Merkle SSZ respecto de \texttt{body\_root}
+conduce al encabezado de ejecución y, en particular, a su campo \texttt{receiptsRoot}. Una prueba
+de inclusión en el árbol de Merkle-Patricia de recibos demuestra, finalmente, que el recibo de la
+transacción de bloqueo pertenece al bloque, que su ejecución fue exitosa y que contiene el evento
+emitido por el contrato del puente con los parámetros del depósito.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{tikzpicture}[
+		node distance=0.55cm,
+		caja/.style={draw, rounded corners=2pt, align=center, minimum width=8.2cm,
+			minimum height=0.95cm, font=\small},
+		flecha/.style={-{Stealth[length=2.2mm]}, thick},
+		etiqueta/.style={font=\footnotesize\itshape, align=left, anchor=west}
+		]
+		\node[caja] (comite) {Comité de sincronización $\mathcal{C}$ (512 claves BLS)};
+		\node[caja, below=of comite] (consenso) {Encabezado de consenso finalizado\\
+			(\texttt{slot}, \texttt{parent\_root}, \texttt{state\_root}, \texttt{body\_root})};
+		\node[caja, below=of consenso] (ejecucion) {Encabezado de ejecución\\
+			(\texttt{stateRoot}, \texttt{transactionsRoot}, \texttt{receiptsRoot})};
+		\node[caja, below=of ejecucion] (recibo) {Recibo de la transacción de bloqueo\\
+			(código de estado, eventos)};
+		\node[caja, below=of recibo] (evento) {Evento de bloqueo\\
+			(contrato emisor, destinatario, monto)};
+
+		\draw[flecha] (comite) -- (consenso)
+			node[etiqueta, midway, xshift=4.25cm] {firma BLS agregada};
+		\draw[flecha] (consenso) -- (ejecucion)
+			node[etiqueta, midway, xshift=4.25cm] {prueba de Merkle SSZ};
+		\draw[flecha] (ejecucion) -- (recibo)
+			node[etiqueta, midway, xshift=4.25cm] {prueba Merkle-Patricia};
+		\draw[flecha] (recibo) -- (evento)
+			node[etiqueta, midway, xshift=4.25cm] {decodificación RLP};
+	\end{tikzpicture}
+	\caption{Cadena de compromisos criptográficos que vincula un evento de bloqueo con la firma
+	del comité de sincronización de Ethereum.}
+	\label{fig:eth_cadena_confianza}
+\end{figure}
+
+Cada eslabón de esta cadena es verificable de manera determinista, de modo que la validez del
+evento queda reducida a la validez de la firma del comité. Sin embargo, ejecutar esta
+verificación completa dentro de un contrato inteligente desplegado en otra cadena implicaría
+evaluar emparejamientos sobre BLS12-381, agregar cientos de claves públicas, calcular numerosos
+hashes SHA-256 y Keccak-256 y decodificar estructuras RLP, todo ello con un costo en gas que
+resulta prohibitivo en la práctica. El enfoque adoptado en este trabajo consiste en realizar
+este cómputo fuera de la cadena y comprimirlo en una prueba de conocimiento cero sucinta, de
+manera que el contrato de destino solo deba verificar dicha prueba. Las herramientas que lo
+hacen posible se presentan en el Capítulo~\ref{chp:conocimiento_cero}.

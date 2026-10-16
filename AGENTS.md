@@ -28,3 +28,14 @@ Normas de estilo: Se deben seguir manuales de citación y formato aceptados inte
 necesito que cada referencia bibliografica que utilices la agregues en el apartado de Referencias como enlaces y cada simbolo, tabla o figura que agregues lo agregues dentro de la lista de simbolos, tablas o figuras donde corresponda.
 
 Asume que tanto el proyecto de SP1 como el NOIR, son identicos tanto en flujo de trabajo como en la arquitectura, por lo que puedes referirte a ambos indistintamente. Que la unica diferencia en ambos sea el lenguaje de programación utilizado para implementar las pruebas de conocimiento cero, siendo SP1 implementado en Rust y NOIR en un lenguaje específico para ZK.
+
+
+Reglas importantes:
+- Toda referencia bibliografica agregada debe ir en el apartado de bibliografia
+- Toda tabla agregada debe ir en LISTA DE TABLAS
+- Todo simbolo agregado debe ir en LISTA DE SÍMBOLOS
+- Toda información adicional que creas correspondiente debe ir en APÉNDICE
+- Siempre que se presenten explicaciones muy técnicas puedes generar un grafico para poder explicar mejor el concepto
+- Toda la estructura de títulos, subtítulos, apartados y recomendaciones generada en la respuesta debe incluirse explícitamente en el índice inicial. Cada elemento del índice debe ir acompañado de una etiqueta de criticidad y necesidad utilizando corchetes, basada en la Opción A ([Necesario - Crítico], [Necesario - Importante], [Sugerencia - Recomendado] o [Sugerencia - Opcional]). obviamente los ya hechos no deben tener etiqueta, solamente los que agregas 
+- Todo título, subtítulo o apartado que se proponga y aún no esté redactado no debe agregarse a los capítulos, sino al apartado PENDIENTES del índice. Cada elemento debe indicar el número de índice recomendado, su ubicación con palabras (entre qué secciones va) y su etiqueta de criticidad. Cuando el elemento se redacte, se lo mueve a su capítulo sin etiqueta y se lo quita de PENDIENTES.
+

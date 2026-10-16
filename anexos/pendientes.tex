@@ -1,0 +1,16 @@
+% Apartados propuestos y aún no redactados. Al redactar uno, se mueve a su capítulo sin
+% etiqueta y se elimina de este archivo.
+% Uso: \pendiente{número recomendado}{título}{ubicación}{etiqueta}{contenido previsto}
+\newcommand{\pendiente}[5]{%
+	\addcontentsline{toc}{section}{#1 #2 (#3) [#4]}%
+	\noindent\textbf{#1 #2} [#4]\\
+	\textit{Ubicación:} #3.\\
+	#5\par\medskip
+}
+
+\pendiente{2.4}{Optimism}{entre Aztec y Puentes}{Necesario - Importante}{%
+	Optimism y el OP Stack como rollup optimista de Ethereum. Estructura de bloques y
+	compatibilidad con la EVM, incluida la equivalencia de gas y de contratos precompilados.
+	Pruebas de fraude, período de impugnación y finalidad. Mensajería nativa con Ethereum y su
+	diferencia con el puente propuesto. Optimism Sepolia como cadena de destino en la que se
+	despliega el contrato verificador.}
