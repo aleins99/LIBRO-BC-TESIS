@@ -168,53 +168,59 @@ esta puede incluirse en una transacción y ser verificada por un contrato inteli
 \label{sec:computacion_prueba}
 
 Esta subsección describe en primer lugar el enfoque basado en circuitos aritméticos y
-restricciones, que constituye el fundamento de herramientas como Circom y Noir. En este enfoque,
-el desarrollador describe la computación mediante un lenguaje, como Circom o Noir, y un
-compilador la transforma en la representación matemática sobre la que opera el sistema de
-prueba. La construcción de esa representación se denomina
-\textbf{aritmetización}~\cite{thaler2022proofs}. Todos los valores que intervienen en esa
-representación son elementos de un \textbf{cuerpo finito} $\mathbb{F}_p$, formado por los enteros
-$\{0, 1, \dots, p - 1\}$ con la suma y el producto calculados módulo un número primo $p$, de
-manera que, a diferencia de lo que ocurre en un procesador convencional, todo resultado se
-reduce módulo $p$. Esta descripción no se aplica de igual modo a todos los sistemas de prueba.
-Las zkVM, presentadas al final de esta subsección, no requieren que el desarrollador exprese la
-computación de esta forma y emplean internamente representaciones distintas, que se analizan en
-la Sección~\ref{sec:sp1}.
+restricciones, en el que el desarrollador describe la computación mediante un lenguaje, como
+Circom o Noir, y un compilador la transforma en la representación matemática sobre la que opera el
+sistema de prueba. La construcción de esa representación se denomina
+\textbf{aritmetización}~\cite{thaler2022proofs}. Todos sus valores son elementos de un
+\textbf{cuerpo finito} $\mathbb{F}_p$, formado por los enteros $\{0, 1, \dots, p - 1\}$ con la
+suma y el producto calculados módulo un número primo $p$, de manera que, a diferencia de lo que
+ocurre en un procesador convencional, todo resultado se reduce módulo $p$.
 
 \paragraph{Circuitos y restricciones.} Un \textbf{circuito aritmético} representa la
-computación como una red de compuertas de suma y de producto sobre $\mathbb{F}_p$. Sin embargo,
-un sistema de prueba no necesita repetir la computación, sino comprobar que un conjunto de
-valores propuesto por el probador es coherente con ella. Por ese motivo, el circuito se expresa
-como un \textbf{sistema de restricciones}, es decir, un conjunto de ecuaciones sobre
-$\mathbb{F}_p$ que deben cumplirse simultáneamente y cuyas incógnitas incluyen las entradas, las
-salidas y todos los valores intermedios. Para demostrar que se conoce un valor $w$ tal que
-$w^{3} + w + 5 = 35$, por ejemplo, la computación puede descomponerse en tres restricciones con
-dos variables intermedias $v_1$ y $v_2$.
+computación como una red de compuertas de suma y de producto sobre $\mathbb{F}_p$. Un sistema de
+prueba, sin embargo, no necesita repetir la computación, sino comprobar que los valores
+propuestos por el probador son coherentes con ella. Por ese motivo, el circuito se expresa como un
+\textbf{sistema de restricciones}, es decir, un conjunto de ecuaciones sobre $\mathbb{F}_p$ que
+deben cumplirse simultáneamente y cuyas incógnitas incluyen las entradas, las salidas y todos los
+valores intermedios. Para demostrar que se conoce un valor $w$ tal que $w^{3} + w + 5 = 35$, por
+ejemplo, la computación puede descomponerse en tres restricciones con dos variables intermedias
+$v_1$ y $v_2$.
 \begin{equation}
 	w \cdot w = v_1, \qquad v_1 \cdot w = v_2, \qquad v_2 + w + 5 = 35 .
 \end{equation}
 El testigo que satisface este sistema no es solamente el valor $w = 3$, sino la asignación
-completa $(w, v_1, v_2) = (3, 9, 27)$. En general, el testigo de un circuito está formado por
-todos los valores que surgen al ejecutar la computación. El formato de restricciones más
-difundido es el sistema de restricciones de rango uno (\textit{Rank-1 Constraint System},
-R1CS)~\cite{parno2013pinocchio}, que se retoma en la Sección~\ref{sec:circom}.
+completa $(w, v_1, v_2) = (3, 9, 27)$. El formato de restricciones más difundido es el sistema de
+restricciones de rango uno (\textit{Rank-1 Constraint System}, R1CS)~\cite{parno2013pinocchio},
+que se retoma en la Sección~\ref{sec:circom}.
 
-Esta forma de representación tiene dos consecuencias prácticas. La primera es que una
-restricción omitida no produce un error de ejecución, sino que amplía el conjunto de testigos
-aceptados, lo que permite a un probador deshonesto satisfacer el sistema con valores que no
-corresponden a la computación prevista. Los circuitos insuficientemente restringidos constituyen,
-de hecho, una categoría recurrente entre las 141 vulnerabilidades reales analizadas por Chaliasos
-et al.~\cite{chaliasos2024sok}. La segunda consecuencia es que las operaciones que no son nativas
-del cuerpo finito resultan costosas. Las funciones de hash SHA-256 y Keccak-256, empleadas en el
-consenso y en las estructuras de datos de Ethereum, operan sobre bits, y cada bit debe
-representarse como un elemento de $\mathbb{F}_p$ restringido a los valores $0$ y $1$, por lo que
-una única evaluación de estas funciones requiere un número de restricciones muy superior al de
-una operación aritmética nativa. Los sistemas actuales mitigan este costo mediante tablas de
-búsqueda (\textit{lookup tables}), técnica que se retoma en la Sección~\ref{sec:noir}.
+Esta representación tiene dos consecuencias prácticas. La primera es que una restricción omitida
+no produce un error de ejecución, sino que amplía el conjunto de testigos aceptados y permite a
+un probador deshonesto satisfacer el sistema con valores ajenos a la computación prevista. Los
+circuitos insuficientemente restringidos constituyen, de hecho, una categoría recurrente entre las
+141 vulnerabilidades reales analizadas por Chaliasos et al.~\cite{chaliasos2024sok}. La segunda
+es que las operaciones que no son nativas del cuerpo finito resultan costosas. Las funciones de
+hash SHA-256 y Keccak-256, empleadas en Ethereum, operan sobre bits, y representar cada bit como
+un elemento de $\mathbb{F}_p$ restringido a los valores $0$ y $1$ multiplica el número de
+restricciones. Los sistemas actuales
+mitigan este costo mediante tablas de búsqueda (\textit{lookup tables}), que se retoman en la
+Sección~\ref{sec:noir}.
 
 \paragraph{Generación y verificación de la prueba.} Una vez definida la representación, el
 proceso completo se desarrolla en cuatro etapas, que la Figura~\ref{fig:flujo_prueba} representa
 de manera esquemática.
+
+\begin{enumerate}
+	\item \textbf{Configuración inicial.} A partir del sistema de restricciones se generan los
+	parámetros públicos que emplean el probador y el verificador. Esta etapa se realiza una única
+	vez y, en los sistemas transparentes, no requiere valores secretos.
+	\item \textbf{Generación del testigo.} El probador ejecuta la computación sobre las entradas
+	concretas y registra todos los valores que intervienen en ella.
+	\item \textbf{Generación de la prueba.} El probador transforma el testigo en una prueba $\pi$
+	mediante operaciones criptográficas.
+	\item \textbf{Verificación.} El verificador comprueba la prueba $\pi$ a partir del enunciado
+	$x$ y de los parámetros públicos, sin acceso al testigo ni a la computación original, y la
+	acepta o la rechaza.
+\end{enumerate}
 
 \begin{figure}[htbp]
 	\centering
@@ -249,67 +255,40 @@ de manera esquemática.
 	\label{fig:flujo_prueba}
 \end{figure}
 
-\begin{enumerate}
-	\item \textbf{Configuración inicial.} A partir del sistema de restricciones se generan los
-	parámetros públicos que emplean el probador y el verificador. Esta etapa se realiza una única
-	vez y, en los sistemas transparentes, no requiere valores secretos.
-	\item \textbf{Generación del testigo.} El probador ejecuta la computación sobre las entradas
-	concretas y registra todos los valores que intervienen en ella.
-	\item \textbf{Generación de la prueba.} El probador transforma el testigo en una prueba $\pi$
-	mediante operaciones criptográficas. En muchas construcciones prácticas, esta etapa
-	suele ser una de las más costosas del proceso, tanto en tiempo como en memoria.
-	\item \textbf{Verificación.} El verificador comprueba la prueba $\pi$ a partir del enunciado
-	$x$ y de los parámetros públicos, sin acceso al testigo ni a la computación original, y la
-	acepta o la rechaza.
-\end{enumerate}
-
 El reparto del trabajo entre ambas partes es marcadamente asimétrico. El costo de generar la
-prueba crece al menos de manera lineal con el tamaño de la computación y, en la práctica, suele
-superar ampliamente el de ejecutarla, mientras que el costo de verificarla es, en los sistemas que se describen en la
+prueba crece al menos de manera lineal con el tamaño de la computación y suele superar ampliamente
+el de ejecutarla, mientras que el de verificarla es, en los sistemas de la
 Sección~\ref{sec:snarks_starks}, constante o muy pequeño en comparación. Por ese motivo, en las
-aplicaciones blockchain la prueba se genera fuera de la cadena (\textit{off-chain}), en equipos
-con recursos suficientes, y se verifica dentro de la cadena (\textit{on-chain}), en un contrato
-inteligente que recibe la prueba y el enunciado como datos de una transacción. Conviene
-subrayar, además, que la garantía obtenida se limita a que el probador conoce un testigo que
-satisface las restricciones para el enunciado dado. Su valor depende, por lo tanto, de que las
-restricciones expresen fielmente la afirmación que se pretende establecer, y alcanza únicamente
-a los valores que forman parte del enunciado, de modo que todo dato que el verificador utilice para tomar su decisión, como
-el destinatario o el monto de una transferencia, debe ser una entrada pública o estar vinculado
-criptográficamente a una.
+aplicaciones blockchain la prueba se genera fuera de la cadena (\textit{off-chain}) y se verifica
+dentro de ella (\textit{on-chain}), en un contrato inteligente. La garantía obtenida se limita, además, a que el
+probador conoce un testigo que satisface las restricciones para el enunciado dado. Su valor
+depende de que las restricciones expresen fielmente la afirmación que se pretende establecer, y
+todo dato que el verificador utilice para decidir, como el destinatario o el monto de una
+transferencia, debe ser una entrada pública o estar vinculado criptográficamente a una.
 
 \paragraph{Del circuito a la ejecución de programas.} En el enfoque descrito, cada computación
 da lugar a un sistema de restricciones específico, cuyo tamaño queda fijado de antemano. Los
-ciclos deben desplegarse con una cantidad máxima de iteraciones conocida al construir el
-circuito, las bifurcaciones que dependen de los datos obligan a representar ambas ramas, y toda
-modificación de la lógica produce un circuito distinto. Circom y Noir, analizados en las
-Secciones~\ref{sec:circom} y~\ref{sec:noir}, pertenecen a este enfoque, aunque difieren en el
-nivel de abstracción que ofrecen al desarrollador.
+ciclos deben desplegarse hasta una cantidad máxima de iteraciones, las bifurcaciones que dependen
+de los datos obligan a representar ambas ramas y toda modificación de la lógica produce un
+circuito distinto. Circom y Noir, analizados en las Secciones~\ref{sec:circom}
+y~\ref{sec:noir}, pertenecen a este enfoque.
 
-Existe una forma conceptualmente distinta de plantear el problema. En lugar de demostrar que un
-testigo satisface las restricciones de una computación particular, puede demostrarse que un
-programa arbitrario, ejecutado sobre un procesador determinado, produjo cierto resultado. En
-este caso las restricciones no describen el programa sino el procesador, puesto que expresan que
-cada paso de la ejecución es una transición válida de acuerdo con la instrucción
-correspondiente. El testigo pasa a ser la \textbf{traza de ejecución}, es decir, el registro del
-estado del procesador en cada paso, y el programa se convierte en un dato más del enunciado, de
-manera que un único sistema de restricciones permite probar la ejecución de cualquier programa.
-Ben-Sasson et al.\ materializaron esta idea al construir pruebas sucintas para la ejecución de
-programas escritos en el lenguaje C~\cite{bensasson2013snarks}.
-
-Una \textbf{máquina virtual de conocimiento cero} (\textit{zero-knowledge virtual machine},
-zkVM) aplica este principio a un conjunto de instrucciones concreto. La zkVM ejecuta un programa
-escrito en un lenguaje de propósito general y compilado con herramientas convencionales,
-registra su traza y genera una prueba de que la ejecución fue correcta y produjo determinadas
-salidas públicas. SP1, analizado en la Sección~\ref{sec:sp1}, ejecuta de
-este modo programas escritos en Rust y compilados al conjunto de instrucciones
-RISC-V~\cite{succinctsp1}. La diferencia entre ambos enfoques no reside en lo que pueden
-demostrar, sino en los compromisos que adoptan. En el enfoque basado en circuitos, el
-desarrollador razona en términos de restricciones, lo que exige un conocimiento especializado
-pero permite ajustar la representación a la computación. En el enfoque basado en una zkVM, el
-desarrollador razona en términos de un programa convencional, lo que facilita el desarrollo, la
-reutilización de bibliotecas y la depuración, a cambio de un costo adicional por cada
-instrucción ejecutada. Este compromiso es el que motiva la comparación entre Noir y SP1 planteada
-en la hipótesis del presente trabajo.
+Un enfoque alternativo consiste en demostrar que un programa arbitrario, ejecutado sobre un
+procesador determinado, produjo cierto resultado. En ese caso, las restricciones no describen el
+programa sino el procesador, ya que expresan que cada paso de la ejecución es una transición
+válida, y el testigo pasa a ser la \textbf{traza de ejecución}, es decir, el registro del estado
+del procesador en cada paso. Un único sistema de restricciones permite así probar la ejecución de
+cualquier programa, idea que Ben-Sasson et al.\ materializaron para programas escritos en
+C~\cite{bensasson2013snarks}. Una \textbf{máquina virtual de conocimiento cero}
+(\textit{zero-knowledge virtual machine}, zkVM) aplica este principio a un conjunto de
+instrucciones concreto. SP1, analizado en la Sección~\ref{sec:sp1}, ejecuta de este modo
+programas escritos en Rust y compilados para RISC-V~\cite{succinctsp1}. Ambos enfoques no
+difieren en lo que pueden demostrar, sino en sus compromisos. Los circuitos exigen razonar en
+términos de restricciones, pero permiten ajustar la representación a la computación, mientras
+que una zkVM permite razonar en términos de un programa convencional, lo que facilita el
+desarrollo y la reutilización de bibliotecas, a cambio de un costo adicional por cada instrucción
+ejecutada. Este compromiso motiva la
+comparación entre Noir y SP1 planteada en la hipótesis del presente trabajo.
 
 % ---------------------------------------------------------------------------
 \subsection{SNARKs y STARKs}

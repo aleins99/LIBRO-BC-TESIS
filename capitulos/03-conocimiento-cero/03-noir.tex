@@ -323,27 +323,6 @@ especificación de este tipo forman parte de las vulnerabilidades documentadas e
 en pruebas sucintas~\cite{chaliasos2024sok}, y el propio repositorio de Noir advierte que la
 implementación no ha sido auditada ni revisada para su uso en producción~\cite{noirrepo}.
 
-\begin{figure}[htbp]
-	\centering
-	\begin{minipage}{0.8\textwidth}
-		\begin{lstlisting}[language=Noir]
-unconstrained fn inverse(x: Field) -> Field {
-    if x == 0 { 0 } else { 1 / x }
-}
-
-fn main(x: Field) -> pub Field {
-    // Safety: el resultado se restringe a continuacion
-    let inv = unsafe { inverse(x) };
-    assert(x * inv == 1);
-    inv
-}
-\end{lstlisting}
-	\end{minipage}
-	\caption{Cálculo no restringido de un inverso en Noir, seguido de la restricción que lo
-	valida.}
-	\label{fig:noir_unconstrained}
-\end{figure}
-
 Noir conserva, además, una forma de cálculo no restringido. Las funciones declaradas como
 \lstinline|unconstrained| se compilan a código Brillig y se ejecutan fuera del sistema de
 restricciones, de manera que sus resultados se incorporan al testigo sin que ninguna restricción
@@ -373,6 +352,27 @@ Figura~\ref{fig:noir_unconstrained} produjo un diagnóstico que indicaba que los
 llamada no estaban suficientemente restringidos, aunque el programa se compiló y ejecutó de todos
 modos. Este diagnóstico, como las comprobaciones de Circom, identifica patrones conocidos, pero no
 sustituye una revisión del programa.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{minipage}{0.8\textwidth}
+		\begin{lstlisting}[language=Noir]
+unconstrained fn inverse(x: Field) -> Field {
+    if x == 0 { 0 } else { 1 / x }
+}
+
+fn main(x: Field) -> pub Field {
+    // Safety: el resultado se restringe a continuacion
+    let inv = unsafe { inverse(x) };
+    assert(x * inv == 1);
+    inv
+}
+\end{lstlisting}
+	\end{minipage}
+	\caption{Cálculo no restringido de un inverso en Noir, seguido de la restricción que lo
+	valida.}
+	\label{fig:noir_unconstrained}
+\end{figure}
 
 La vinculación entre los datos públicos y la relación demostrada constituye una segunda
 consideración. Como se señaló en la Sección~\ref{sec:computacion_prueba}, la garantía de la prueba
