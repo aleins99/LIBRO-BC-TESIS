@@ -6,14 +6,14 @@ Tema: un puente (bridge) de tokens entre dos blockchains que reemplaza la confia
 en un relayer por verificación criptográfica con pruebas de conocimiento cero (ZK).
 
 Problema: los puentes cross-chain tradicionales usan lock-and-mint con un relayer de
-confianza: el usuario bloquea tokens en la cadena origen y un operador acuña el
+confianza, el usuario bloquea tokens en la cadena origen y un operador acuña el
 equivalente en la cadena destino. La seguridad depende 100% de confiar en ese relayer,
 que podría acuñar de forma fraudulenta. Los puentes son el componente más atacado del
 ecosistema cripto.
 
 Solución: que el contrato de destino no confíe en el relayer, sino que verifique
 on-chain una prueba ZK antes de acuñar. El relayer deja de ser un acuñador de confianza
-y pasa a ser un "probador": cualquiera con una prueba válida puede liberar los fondos, y
+y pasa a ser un "probador". Cualquiera con una prueba válida puede liberar los fondos, y
 nadie puede acuñar sin ella.
 
 no utilices "entonces sucede: tal cosa" o "algo: lo otro" esto no queda para nada natural de leer, debes hacer que suene natural al leerlo, no puedes usar : en todos lados, necesito que utilices un lenguaje formal, académico y científico
