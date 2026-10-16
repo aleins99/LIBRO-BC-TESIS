@@ -1,2 +1,415 @@
 \section{SP1}
 \label{sec:sp1}
+
+La Sección~\ref{sec:noir} concluyó que Noir permite describir la verificación como un programa,
+pero que cada programa sigue dando lugar a un circuito específico. SP1 adopta el enfoque
+alternativo presentado en la Sección~\ref{sec:computacion_prueba}, en el que el sistema de
+restricciones describe un procesador y la prueba certifica que un programa arbitrario se ejecutó
+correctamente sobre él. Para el desarrollador, el cambio consiste en escribir un programa
+convencional en Rust y delegar en la máquina virtual la representación de su ejecución. Este
+cambio no elimina la necesidad de especificar correctamente la relación que se pretende
+demostrar, sino que la traslada al programa que se ejecuta. La presente sección describe el origen
+y los componentes de SP1, la forma de escribir programas y de definir sus valores públicos, el
+proceso que conduce desde el código fuente hasta una prueba verificable en Ethereum y las
+limitaciones relevantes para un puente entre cadenas. La descripción corresponde a la serie~6 de
+SP1, en particular a las versiones 6.1.0 y 6.2.2 que resuelven las dependencias del proyecto, ya
+que esta serie introdujo cambios de arquitectura respecto de las anteriores.
+
+% ---------------------------------------------------------------------------
+\subsection{Origen y propósito}
+\label{sec:sp1_origen}
+
+SP1 es una máquina virtual de conocimiento cero de código abierto, desarrollada por Succinct
+Labs, que permite demostrar la ejecución correcta de programas compilados para la arquitectura
+RISC-V~\cite{sp1repo, sp1docsv6}. Su repositorio reconoce como antecedentes directos el conjunto
+de herramientas criptográficas Plonky3, el diseño de tablas y de búsquedas cruzadas de la máquina
+virtual Valida, la cadena de compilación de RISC Zero y la idea de los \textit{builtins} de Cairo,
+que SP1 generaliza mediante precompilados implementados como tablas adicionales~\cite{sp1repo}.
+
+La serie~6, publicada a partir de febrero de 2026, incorporó un sistema de pruebas denominado
+Hypercube, basado en polinomios multilineales~\cite{sp1docsv6}. En esta serie, la máquina virtual
+implementa el conjunto de instrucciones RV64IM, es decir, la base entera de 64 bits de RISC-V
+junto con la extensión M de multiplicación y división~\cite{riscvmanual2024, sp1docsv6}, y los
+programas se compilan para el destino \texttt{riscv64im-succinct-zkvm-elf}~\cite{sp1repo}. El
+conjunto no incluye instrucciones de punto flotante, de modo que esas operaciones deben emularse
+mediante software. Las versiones anteriores empleaban un conjunto de instrucciones de 32 bits, y
+la documentación advierte que las cadenas de compilación de 32 y 64 bits son incompatibles entre
+sí~\cite{sp1docsv6}. Los valores con los que opera el sistema de pruebas pertenecen al cuerpo
+primo KoalaBear, de módulo $p = 2^{31} - 2^{24} + 1$, y a una extensión de grado~4 de dicho
+cuerpo~\cite{sp1repo}.
+
+Al igual que en el caso de Noir, conviene distinguir los componentes que intervienen. El programa
+se escribe en Rust, aunque el repositorio indica que puede emplearse cualquier lenguaje compilado
+mediante LLVM~\cite{sp1repo}. Su compilación al conjunto de instrucciones admitido se realiza con
+una cadena de compilación de Rust distribuida por Succinct, que produce un ejecutable en formato
+ELF. La máquina virtual ejecuta ese archivo y registra los datos necesarios para demostrar su
+ejecución. El sistema de pruebas, formado por el protocolo Hypercube, un mecanismo de recursión y
+una etapa final que traduce la prueba a Groth16 o PLONK, genera la prueba a partir de esos datos.
+Por último, la verificación puede realizarse con el kit de desarrollo de SP1, escrito en Rust, o
+mediante contratos verificadores en Solidity publicados por Succinct~\cite{sp1repo,
+sp1contracts}.
+
+La reutilización de código constituye el principal atractivo de este enfoque. El repositorio
+indica que los programas pueden utilizar la biblioteca estándar de Rust y que la mayoría de las
+bibliotecas de su ecosistema deberían ser compatibles~\cite{sp1repo}. Los programas del puente
+utilizan, por ejemplo, bibliotecas existentes para SHA-256, Keccak-256, aritmética sobre la curva
+BLS12-381 y codificación según el ABI de Solidity. Esta compatibilidad tiene, sin embargo,
+límites. El programa se ejecuta sin sistema operativo, por lo que solo dispone de las llamadas al
+sistema que define la propia máquina virtual, como la lectura de entradas, la publicación de
+valores, la finalización de la ejecución y los precompilados descritos en la
+Sección~\ref{sec:sp1_flujo}~\cite{sp1repo}. Las bibliotecas que dependen del acceso a archivos, a
+la red o a otros servicios del sistema operativo no pueden utilizarse sin adaptación, y toda
+dependencia debe poder compilarse para el destino de 64 bits mencionado. Que una biblioteca
+compile, además, no implica que su costo de prueba resulte razonable, cuestión que se retoma en la
+Sección~\ref{sec:sp1_limitaciones}.
+
+SP1 debe distinguirse, asimismo, de la infraestructura de generación de pruebas que ofrece
+Succinct. El kit de desarrollo permite generar las pruebas localmente, en procesador o en GPU, y
+también delegarlas en una red de probadores remota, funcionalidad que requiere habilitar una
+característica específica del kit y credenciales del servicio~\cite{sp1repo}. Los manifiestos del
+proyecto no habilitan esa característica, por lo que su implementación genera las pruebas de forma
+local.
+
+El interés de SP1 para el presente trabajo reside en que materializa el enfoque basado en la
+ejecución de programas que la hipótesis contrapone al de Noir. La lógica de verificación de un
+puente, que incluye la decodificación de estructuras RLP, el cálculo de hashes y la verificación de
+firmas, puede escribirse como un programa Rust convencional que reutiliza bibliotecas existentes,
+mientras que la máquina virtual asume su representación como sistema de restricciones. Las
+consecuencias de este enfoque sobre los tiempos de prueba no se anticipan en este capítulo, sino
+que forman parte de la comparación del Capítulo~\ref{chp:zkbridge}.
+
+% ---------------------------------------------------------------------------
+\subsection{Programas, entradas y valores públicos}
+\label{sec:sp1_programas}
+
+Una aplicación de SP1 se compone de dos programas. El \textbf{programa invitado}
+(\textit{guest}) es el que se compila para la máquina virtual y cuya ejecución se demuestra. El
+\textbf{programa anfitrión} (\textit{host}) es un programa Rust convencional que se ejecuta fuera
+de la máquina virtual y utiliza el kit de desarrollo para preparar las entradas, solicitar la
+ejecución o la generación de la prueba y procesar el resultado~\cite{sp1repo, sp1docsv6}. La prueba
+respalda únicamente la ejecución del programa invitado. Las operaciones del anfitrión, como la
+obtención de datos de un nodo de la cadena de origen, su decodificación o la construcción de las
+entradas, permanecen fuera de la ejecución demostrada, por lo que, si la corrección de esos datos
+es relevante, el programa invitado debe comprobarla por sí mismo.
+
+El anfitrión escribe las entradas en un objeto \texttt{SP1Stdin}, que las serializa, y el programa
+invitado las lee mediante la función \lstinline|sp1_zkvm::io::read|, que las deserializa, o
+mediante \lstinline|read_vec|, que devuelve los bytes sin procesar~\cite{sp1repo}. La
+documentación del código advierte que este flujo de entrada está controlado por el
+probador~\cite{sp1repo}. Las entradas cumplen, por lo tanto, el papel del testigo de la
+Sección~\ref{sec:nocion_zk}, ya que nada garantiza que correspondan a datos reales salvo las
+comprobaciones que el propio programa realice sobre ellas.
+
+Las condiciones se comprueban con las construcciones ordinarias de Rust, como la macro
+\lstinline|assert!| o el tratamiento de errores que interrumpe la ejecución. Una comprobación
+fallida provoca la terminación del programa con un código de salida distinto de cero, y una
+ejecución que termina de ese modo no puede dar lugar a una prueba que los verificadores acepten. La
+función de verificación del kit comprueba por defecto que la ejecución haya terminado con éxito, y
+el contrato verificador de la versión utilizada rechaza cualquier código de salida distinto de
+cero~\cite{sp1repo, sp1contracts}.
+
+Los valores públicos se publican mediante \lstinline|sp1_zkvm::io::commit|, que serializa un
+valor, o mediante \lstinline|commit_slice|, que añade bytes sin procesar~\cite{sp1repo}. El
+conjunto de bytes publicados forma parte del enunciado, se entrega al verificador junto con la
+prueba y, en el contrato verificador, interviene a través de su hash SHA-256~\cite{sp1contracts}.
+Su codificación debe acordarse con quien lo consume, de modo que un contrato en Solidity, por
+ejemplo, necesita una codificación que pueda decodificar sin ambigüedad, como la del ABI de
+Ethereum.
+
+El programa cuya ejecución se demuestra se identifica mediante su clave de verificación, que el kit
+deriva de forma determinista del ejecutable ELF durante la etapa de preparación~\cite{sp1repo}. En
+el contrato verificador, esa clave se representa mediante un valor de 32 bytes que se proporciona
+junto con los valores públicos y la prueba~\cite{sp1contracts}. Quien verifica debe fijar el valor
+esperado, ya que, si no lo comprobara, aceptaría también una prueba válida de otro programa que
+publicara valores con el mismo formato.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{minipage}{\textwidth}
+		\begin{lstlisting}[language=Rust]
+#![no_main]
+sp1_zkvm::entrypoint!(main);
+
+pub fn main() {
+    // Entrada privada: la suministra el probador.
+    let w = sp1_zkvm::io::read::<u64>();
+    // Aritmetica comprobada: un desbordamiento detiene la ejecucion.
+    let y = w
+        .checked_mul(w)
+        .and_then(|w2| w2.checked_mul(w))
+        .and_then(|w3| w3.checked_add(w))
+        .and_then(|s| s.checked_add(5))
+        .expect("w fuera del dominio admitido");
+    // Valor publico: pasa a formar parte del enunciado.
+    sp1_zkvm::io::commit(&y);
+}
+\end{lstlisting}
+	\end{minipage}
+	\caption{Programa invitado de SP1 que calcula $y = w^{3} + w + 5$ con aritmética entera
+	comprobada.}
+	\label{fig:sp1_guest}
+\end{figure}
+
+Los datos que el programa lee y no publica no se entregan al verificador, pero esto no basta para
+afirmar que permanezcan secretos. Por una parte, los valores públicos pueden permitir deducirlos.
+Por otra, la propiedad de conocimiento cero depende del modo de prueba. Según el modelo de
+seguridad de SP1, las pruebas Groth16 y PLONK, generadas con la biblioteca gnark, son de
+conocimiento cero, mientras que las pruebas de núcleo y las comprimidas no satisfacen actualmente
+esa propiedad~\cite{sp1securitymodel}. En concordancia con ello, el repositorio de la versión
+utilizada incluye un componente experimental y no auditado destinado a añadir conocimiento cero a
+los protocolos multilineales en los que se basan estas últimas~\cite{sp1repo}. En el diseño del
+puente, la prueba que se verifica en la cadena de destino es una prueba Groth16, aunque la
+propiedad de conocimiento cero no resulta necesaria en una aplicación cuyos datos son públicos
+(Sección~\ref{sec:nocion_zk}).
+
+La Figura~\ref{fig:sp1_guest} muestra un programa invitado que retoma la relación
+$y = w^{3} + w + 5$ de los ejemplos de Circom y Noir. A diferencia de estos, que evalúan la relación
+en $\mathbb{F}_p$, el programa emplea enteros de 64 bits sin signo, cuya aritmética no es la de un
+cuerpo finito. Para evitar cualquier ambigüedad, cada operación se realiza de forma comprobada, de
+modo que un resultado que exceda el rango de esos enteros interrumpe la ejecución en lugar de
+reducirse módulo $2^{64}$. El programa acepta, por lo tanto, únicamente los valores de $w$ para los
+que $w^{3} + w + 5 < 2^{64}$, es decir, $0 \leq w \leq 2\,642\,245$. En ese dominio, el resultado
+coincide con el de los ejemplos anteriores, ya que el valor entero es menor que el módulo de
+254~bits que estos emplean, pero fuera de él la relación no es equivalente, puesto que aquellos
+aceptan cualquier elemento del cuerpo.
+
+El programa lee $w$ como entrada privada, calcula $y$ con aritmética comprobada y publica $y$. La
+Figura~\ref{fig:sp1_host} muestra el código anfitrión imprescindible para este flujo, que escribe
+$w$ en la entrada, deriva las claves a partir del ejecutable, genera y verifica una prueba y lee el
+valor público. La prueba respalda que el programa identificado por la clave de verificación,
+ejecutado con alguna entrada, terminó correctamente y publicó $y$. El verificador recibe la clave
+de verificación, los valores públicos y la prueba, pero no $w$. El ejemplo no ilustra, sin embargo,
+ninguna forma de confidencialidad, ya que la función es estrictamente creciente en el dominio
+admitido y el valor público $y$ determina, por lo tanto, un único $w$ que cualquiera puede calcular.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{minipage}{\textwidth}
+		\begin{lstlisting}[language=Rust]
+use sp1_sdk::{
+    blocking::{ProveRequest, Prover, ProverClient},
+    include_elf, Elf, ProvingKey, SP1Stdin,
+};
+
+const ELF: Elf = include_elf!("cubic-program");
+
+fn main() {
+    let client = ProverClient::from_env();
+    let mut stdin = SP1Stdin::new();
+    stdin.write(&3u64); // w: entrada privada
+
+    let pk = client.setup(ELF).unwrap(); // claves derivadas del ELF
+    let mut proof = client.prove(&pk, stdin).compressed().run().unwrap();
+    client.verify(&proof, pk.verifying_key(), None).unwrap();
+
+    let y: u64 = proof.public_values.read(); // valor publico
+    println!("y = {y}");
+}
+\end{lstlisting}
+	\end{minipage}
+	\caption{Programa anfitrión que prepara la entrada, genera y verifica una prueba comprimida y
+	lee el valor público.}
+	\label{fig:sp1_host}
+\end{figure}
+
+En una compilación y ejecución realizadas para el presente trabajo con SP1~6.2.2, el ejecutable
+del programa invitado resultó ser un archivo ELF para RISC-V de 64 bits. La ejecución con $w = 3$
+publicó $y = 35$ tras 4802 instrucciones, cifra que incluye la lectura y deserialización de la
+entrada, mientras que con $w = 3\,000\,000$ la comprobación de desbordamiento interrumpió el
+programa, que terminó con código de salida~1. El programa anfitrión de la
+Figura~\ref{fig:sp1_host} generó y verificó correctamente una prueba comprimida para $w = 3$.
+
+% ---------------------------------------------------------------------------
+\subsection{Compilación, ejecución, generación y verificación de la prueba}
+\label{sec:sp1_flujo}
+
+La Figura~\ref{fig:sp1_flujo} representa el recorrido desde el código fuente hasta una prueba
+verificable. La primera etapa es la compilación del programa invitado, que el kit realiza con la
+cadena de compilación de Succinct, ya sea desde el script de compilación del anfitrión o mediante
+una orden específica, y que produce un ejecutable ELF para RISC-V de 64 bits~\cite{sp1repo}. El
+anfitrión incorpora ese ejecutable en su propio binario. A partir de él, la etapa de preparación
+deriva de forma determinista la clave de prueba y la clave de verificación, sin emplear ningún
+valor secreto~\cite{sp1repo}. Esta preparación no debe confundirse con la configuración confiable
+de algunos SNARKs descrita en la Sección~\ref{sec:snarks_starks}, ya que solo depende del programa.
+Las entradas, por su parte, se preparan en el anfitrión y se codifican al escribirlas en el objeto
+de entrada, con independencia de la preparación de las claves.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{tikzpicture}[
+		herramienta/.style = {draw, rounded corners, align=center, minimum height=1.1cm,
+			text width=2.2cm, font=\footnotesize},
+		artefacto/.style = {draw, dashed, align=center, minimum height=0.9cm,
+			text width=2.2cm, font=\footnotesize},
+		flecha/.style = {-{Stealth[length=2.5mm]}, thick},
+		dato/.style = {font=\footnotesize, align=center}
+	]
+		\node[artefacto] (fuente) at (0, 0) {Programa\\invitado (Rust)};
+		\node[herramienta] (compilador) at (2.65, 0) {Compilación\\(cadena de\\Succinct)};
+		\node[artefacto] (elf) at (5.3, 0) {Ejecutable\\ELF RISC-V};
+		\node[herramienta] (setup) at (7.95, 2.5) {Preparación\\de claves};
+		\node[artefacto] (claves) at (10.6, 2.5) {Claves de\\prueba y de\\verificación};
+		\node[herramienta] (verify) at (13.25, 2.5) {Verificación\\(kit o contrato)};
+		\node[herramienta] (exec) at (7.95, -2.2) {Ejecución\\(RV64IM)};
+		\node[artefacto] (entradas) at (7.95, -4.0) {Entradas\\\texttt{SP1Stdin}};
+		\node[herramienta] (core) at (10.6, -2.2) {Pruebas de\\fragmentos};
+		\node[herramienta] (rec) at (13.25, -2.2) {Recursión y\\compresión};
+		\node[herramienta] (wrap) at (13.25, 0.1) {Envoltura\\Groth16\\o PLONK};
+
+		\draw[flecha] (fuente) -- (compilador);
+		\draw[flecha] (compilador) -- (elf);
+		\draw[flecha] (elf) -- (setup);
+		\draw[flecha] (elf) -- (exec);
+		\draw[flecha] (setup) -- (claves);
+		\draw[flecha] (claves) -- (verify);
+		\draw[flecha] (entradas) -- (exec);
+		\draw[flecha] (exec) -- (core);
+		\draw[flecha] (core) -- (rec);
+		\draw[flecha] (rec) -- (wrap);
+		\draw[flecha] (wrap) -- node[left, dato] {$\pi$ y valores\\públicos} (verify);
+		\draw[flecha] (claves) -- node[left, dato] {clave de\\prueba} (core);
+	\end{tikzpicture}
+	\caption{Proceso de compilación, ejecución, generación y verificación de una prueba con SP1.}
+	\label{fig:sp1_flujo}
+\end{figure}
+
+En la etapa de ejecución, la máquina virtual ejecuta el programa sobre las entradas. El kit
+permite ejecutar sin generar ninguna prueba, en cuyo caso devuelve los valores públicos y un
+informe con el número de instrucciones ejecutadas y de llamadas al sistema~\cite{sp1repo}. Cuando
+se genera una prueba, la ejecución se divide además en \textbf{fragmentos} (\textit{shards}), de
+aproximadamente $2^{22}$ instrucciones cada uno según la documentación~\cite{sp1docsv6}, y los
+eventos registrados en cada fragmento dan lugar a la traza que se demuestra. La división acota los
+recursos necesarios para probar cada fragmento y permite procesarlos de forma independiente.
+
+La traza de cada fragmento se organiza en tablas, en las que cada tabla corresponde a un tipo de
+instrucción o a un componente especializado y sus columnas contienen los operandos necesarios para
+comprobar la operación~\cite{sp1docsv6}. Dado que una palabra de 64 bits no cabe en un elemento del
+cuerpo KoalaBear, cada palabra se representa mediante cuatro valores de 16 bits~\cite{sp1repo}. Las
+restricciones que relacionan las columnas de una misma tabla se comprueban mediante un protocolo de
+tipo \textit{sumcheck}, denominado \textit{zerocheck}, y las \textbf{interacciones} entre tablas, por
+ejemplo entre la tabla que registra una instrucción y las que verifican sus operandos, se comprueban
+mediante LogUp-GKR, un argumento de derivadas logarítmicas que verifica que los valores enviados y
+recibidos coinciden con sus multiplicidades~\cite{sp1docsv6, papini2023logupgkr}. La coherencia de
+la memoria entre fragmentos se comprueba mediante un hash de multiconjuntos, que transforma cada
+lectura y escritura en un punto de una curva elíptica mediante la función Poseidon2, de modo que la
+igualdad entre los conjuntos de escrituras y de lecturas se reduce a la igualdad de sus
+hashes~\cite{sp1docsv6}. Por último, el probador se compromete con toda la traza del fragmento como
+un único polinomio multilineal, mediante un esquema de compromiso denominado \textit{jagged}, que
+admite tablas de alturas distintas~\cite{hemo2025jagged}, construido sobre el esquema
+BaseFold~\cite{zeilberger2023basefold, sp1repo}. Este esquema se basa en funciones de hash, por lo
+que esta parte del sistema no requiere configuración confiable, y la interacción se elimina mediante
+la transformación de Fiat-Shamir (Sección~\ref{sec:interactivas}).
+
+Las pruebas de los fragmentos constituyen la prueba de núcleo, cuyo tamaño total es proporcional a
+la extensión de la ejecución~\cite{sp1docsv6}. Para obtener una prueba de tamaño constante, el
+mecanismo de recursión verifica las pruebas de los fragmentos dentro de la propia máquina de pruebas
+y las combina en forma de árbol hasta obtener una única prueba \textit{comprimida}~\cite{sp1docsv6}.
+Esta prueba puede verificarse con el kit, pero no está pensada para su verificación en Ethereum.
+Para ello, una etapa adicional cambia la función de hash empleada por la recursión y, finalmente,
+una etapa de envoltura produce una prueba Groth16 o PLONK sobre la curva BN254~\cite{sp1docsv6,
+sp1repo}. Esta última etapa utiliza la biblioteca gnark~\cite{gnarkrepo} y puede ejecutarse mediante
+una imagen de Docker o, habilitando una característica del kit, de forma nativa~\cite{sp1repo}.
+Según la documentación, las claves del circuito de Groth16 proceden de la ceremonia Ignition,
+complementada con contribuciones del equipo de Succinct, mientras que la variante PLONK reutiliza la
+cadena de referencia universal de dicha ceremonia, y las pruebas resultantes ocupan unos 260 y
+868 bytes, respectivamente~\cite{sp1docsv6}.
+
+La verificación puede realizarse con el kit, que admite las pruebas de cualquiera de los modos y
+comprueba por defecto que la ejecución terminó con éxito, o en Ethereum, con las pruebas Groth16 o
+PLONK~\cite{sp1repo, sp1docsv6}. En este último caso, el contrato recibe la clave de verificación
+del programa, los valores públicos y la prueba. Los primeros cuatro bytes de la prueba identifican la
+versión del verificador, lo que permite a un contrato de enrutamiento dirigirla al verificador
+correspondiente. El contrato de Groth16 de la versión de circuito 6.1.0, que corresponde a las
+versiones utilizadas en el proyecto, comprueba la prueba con cinco entradas públicas, que son la
+clave del programa, el hash SHA-256 de los valores públicos truncado a 253 bits para que quepa en el
+cuerpo de BN254, el código de salida, que debe ser cero, una raíz que identifica las claves del
+mecanismo de recursión y un valor de uso único~\cite{sp1contracts}.
+
+La máquina virtual ofrece, además, \textbf{precompilados}, es decir, tablas especializadas que
+demuestran operaciones costosas sin descomponerlas en instrucciones RISC-V. El programa los invoca
+mediante llamadas al sistema y, en la versión utilizada, abarcan la permutación de Keccak, la
+expansión y la compresión de SHA-256, operaciones sobre las curvas secp256k1, secp256r1, ed25519,
+BN254 y BLS12-381, aritmética sobre los cuerpos de estas curvas y sobre enteros grandes, la función
+Poseidon2 y la verificación de pruebas de SP1~\cite{sp1repo}. Su uso habitual no requiere escribir
+estas llamadas, sino sustituir bibliotecas criptográficas comunes por versiones modificadas que
+dirigen automáticamente sus operaciones hacia los precompilados~\cite{sp1docsv6}. Conviene
+distinguir, por lo tanto, el precompilado, que forma parte del sistema de pruebas, de la biblioteca
+modificada que lo invoca, y de las operaciones del anfitrión, que quedan fuera de la prueba. Si una
+dependencia no utiliza la versión modificada, la operación se ejecuta como instrucciones ordinarias
+y su costo aumenta considerablemente~\cite{sp1docsv6}.
+
+Esta descripción permite identificar intervalos de tiempo de naturaleza distinta. La compilación
+del programa invitado, la preparación de las claves y el despliegue del contrato verificador
+constituyen una preparación que se realiza una vez por programa. La construcción del cliente del
+kit y la obtención de los artefactos que necesita la etapa de envoltura son costos de puesta en
+marcha. En cada operación se repiten, en cambio, la preparación de las entradas en el anfitrión,
+que no forma parte de la prueba, la ejecución, la generación de las pruebas de los fragmentos, su
+compresión y, cuando se requiere la verificación en Ethereum, la envoltura final, seguidas de la
+verificación local y de la verificación en la cadena de destino, cuyo costo se expresa en gas y cuya
+duración incluye la espera hasta la inclusión de la transacción. El modo de ejecución simulado del
+kit, que produce valores públicos reales pero una prueba vacía, no genera ninguna prueba y no debe
+confundirse con estas etapas. Ninguna de ellas tiene necesariamente un equivalente directo en Noir,
+por lo que su correspondencia se establece en la metodología del Capítulo~\ref{chp:zkbridge}.
+
+% ---------------------------------------------------------------------------
+\subsection{Limitaciones y consideraciones de seguridad}
+\label{sec:sp1_limitaciones}
+
+La primera limitación se refiere, como en Noir, a la diferencia entre la expresividad del lenguaje
+y la corrección de la especificación. La máquina virtual garantiza que el programa se ejecutó
+correctamente, pero no que el programa compruebe lo que se pretende. Dado que las entradas están
+controladas por el probador, un programa que reciba como entrada la raíz contra la que verifica la
+inclusión de una transacción, en lugar de derivarla de un encabezado cuya autenticidad también
+compruebe, demuestra únicamente la inclusión respecto de una raíz arbitraria. Las distinciones de
+la Sección~\ref{sec:circom_limitaciones} entre inclusión, autenticidad y finalidad del bloque y
+éxito de la operación siguen siendo responsabilidad del programa y de la aplicación que lo
+utiliza.
+
+La segunda consideración es la identificación del programa. Toda modificación del código, de sus
+dependencias o de la cadena de compilación produce un ejecutable distinto y, en consecuencia, una
+clave de verificación distinta, de modo que el verificador debe fijar la clave correspondiente a
+una compilación concreta. Para que terceros puedan reproducir esa clave, la herramienta de
+compilación ofrece la opción de compilar dentro de un contenedor de Docker con el fin de obtener
+ejecutables reproducibles~\cite{sp1repo}. La verificación debe exigir, además, que la ejecución haya
+terminado con éxito, condición que el kit y el contrato verificador comprueban por defecto.
+
+SP1 admite también cálculo no restringido. El repositorio de la versión utilizada define una macro
+que ejecuta un bloque de código fuera de las restricciones, descarta al finalizar cualquier cambio
+en el estado de la máquina virtual y solo permite transmitir datos al programa a través de un flujo
+de sugerencias que este lee después como una entrada más~\cite{sp1repo}. Su papel es análogo al de
+las funciones no restringidas de Noir y al operador \lstinline|<--| de Circom, ya que los datos así
+obtenidos solo quedan respaldados por las comprobaciones que el programa realice sobre ellos.
+
+Los precompilados introducen supuestos propios. La documentación advierte que los precompilados de
+curvas elípticas asumen que sus entradas son puntos válidos de la curva, sin comprobarlo, que los
+valores de los cuerpos deben estar en su representación canónica y que ciertos casos, como el uso
+del precompilado de suma para duplicar un punto o la presencia del punto en el infinito, deben
+tratarse por separado para no producir pruebas imposibles de verificar~\cite{sp1docsv6}. Las
+bibliotecas modificadas deben corresponder, además, a la versión de SP1 utilizada, y una
+sustitución que no se aplique hace que la operación vuelva a ejecutarse como instrucciones
+ordinarias sin que se produzca ningún error~\cite{sp1docsv6}.
+
+El costo de la generalidad constituye la limitación central del enfoque. Cada instrucción ejecutada
+ocupa filas en las tablas de la traza, cada palabra de 64 bits se representa mediante varios
+elementos del cuerpo y las operaciones criptográficas que no utilizan precompilados se ejecutan como
+secuencias de instrucciones ordinarias. Los hashes binarios y la aritmética sobre la curva
+BLS12-381, presentes en la verificación de un puente, pueden dominar, en consecuencia, el número de
+instrucciones de un programa. El costo final depende, además, de la versión, de la configuración de
+los fragmentos, del hardware disponible, que incluye la posibilidad de emplear GPU, y del modo de
+prueba solicitado, ya que la envoltura en Groth16 o PLONK añade una etapa a la generación. Por ese
+motivo, cualquier medición debe asociarse a la versión, a la configuración y al hardware con que se
+obtuvo.
+
+Por último, la privacidad de las entradas depende del modo de prueba y de quién la genera. Como se
+indicó en la Sección~\ref{sec:sp1_programas}, solo las pruebas Groth16 y PLONK son de conocimiento
+cero, y esa propiedad protege las entradas frente al verificador, pero no frente a quien genera la
+prueba, que necesariamente las conoce. Por ese motivo, la delegación de la prueba en un servicio
+remoto implica, salvo en modalidades específicas que la documentación describe para ese fin, que el
+servicio recibe las entradas del programa~\cite{sp1docsv6}. En un puente cuyos datos son públicos esta limitación carece de
+consecuencias, pero debe tenerse en cuenta en otras aplicaciones.
+
+Con SP1 concluye la exposición de los dos enfoques que el presente trabajo compara, el basado en
+circuitos específicos, representado por Noir, y el basado en la ejecución de programas sobre una
+máquina virtual, representado por SP1. La Sección~\ref{sec:otros_zk} reseña brevemente otras
+herramientas del ecosistema, y el Capítulo~\ref{chp:zkbridge} describe la implementación del puente
+con ambas tecnologías y la metodología con que se comparan.

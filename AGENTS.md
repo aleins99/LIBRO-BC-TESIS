@@ -25,4 +25,6 @@ Impersonalidad o uso de la tercera persona: Es común redactar en tercera person
 Rigor gramatical y léxico: Se deben evitar por completo los modismos, las expresiones coloquiales, los tonos rimbombantes y las exageraciones.
 Normas de estilo: Se deben seguir manuales de citación y formato aceptados internacionalmente o por la propia institución, tales como las Normas APA.
 
-necesito que cada referencia bibliografica que utilices la agregues en el apartado de Referencias como enlaces y cada simbolo, tabla o figura que agregues lo agregues dentro de la lista de simbolos, tablas o figuras donde corresponda
+necesito que cada referencia bibliografica que utilices la agregues en el apartado de Referencias como enlaces y cada simbolo, tabla o figura que agregues lo agregues dentro de la lista de simbolos, tablas o figuras donde corresponda.
+
+Asume que tanto el proyecto de SP1 como el NOIR, son identicos tanto en flujo de trabajo como en la arquitectura, por lo que puedes referirte a ambos indistintamente. Que la unica diferencia en ambos sea el lenguaje de programación utilizado para implementar las pruebas de conocimiento cero, siendo SP1 implementado en Rust y NOIR en un lenguaje específico para ZK.
