@@ -1,2 +1,84 @@
-\section{Otros (Risc0, Succinct, Aligned, Cairo, Halo2, Plonky3)}
+\section{Otros entornos y herramientas del ecosistema}
 \label{sec:otros_zk}
+
+Noir y SP1 no son las únicas herramientas para expresar y demostrar computaciones. La presente
+sección reseña otras que ocupan posiciones distintas en el ecosistema, con el fin de situar la
+elección del presente trabajo, y la Tabla~\ref{tab:otros_zk} resume su relación con el caso de
+estudio.
+
+RISC Zero y Cairo pertenecen, como SP1, al enfoque basado en la ejecución de programas descrito en
+la Sección~\ref{sec:computacion_prueba}. RISC Zero es una máquina virtual de conocimiento cero que
+emula una computadora RISC-V y admite programas escritos en Rust, C y C++. La ejecución se
+demuestra mediante pruebas STARK por segmentos, que un circuito de recursión agrega en una única
+prueba STARK sucinta, y esta puede envolverse opcionalmente en una prueba
+Groth16~\cite{risczerorepo, risczerodocs}. Cairo es, a la vez, una arquitectura de procesador diseñada para que su ejecución
+pueda demostrarse de forma eficiente mediante STARKs y un lenguaje de programación cuya principal
+aplicación actual es Starknet, una solución de escalabilidad de capa 2 de
+Ethereum~\cite{goldberg2021cairo, cairobook}.
+
+Halo2 y Plonky3 se sitúan en otro nivel, ya que no son lenguajes ni máquinas virtuales, sino
+bibliotecas para construir sistemas de prueba. Halo2 emplea una aritmetización derivada de
+PLONK~\cite{halo2book}, por lo que se encuadra en el enfoque basado en circuitos de Noir. Sus
+garantías dependen de la variante. La implementación de Zcash utiliza un compromiso basado en un
+argumento de producto interno y desciende de Halo, presentado como el primer esquema práctico de
+composición recursiva de pruebas sin configuración confiable~\cite{halo2book, bowe2019halo},
+mientras que la variante de Privacy Scaling Explorations sustituyó ese compromiso por KZG para
+abaratar la verificación en Ethereum~\cite{psehalo2}, lo que reintroduce la configuración confiable
+descrita en la Sección~\ref{sec:snarks_starks}. Plonky3, mantenido por el equipo Polygon Zero,
+ofrece primitivas, como compromisos basados en FRI y cuerpos finitos pequeños, que se emplean
+principalmente para construir máquinas virtuales basadas en STARKs~\cite{plonky3repo}, y el
+repositorio de SP1 lo reconoce como antecedente (Sección~\ref{sec:sp1_origen}).
+
+El servicio vigente de Aligned recibe pruebas ya generadas por distintos usuarios y las combina en
+una única prueba recursiva que se verifica en Ethereum, de modo que el costo de la verificación se
+reparte entre todas ellas~\cite{aligneddocs}. Su capa de verificación
+anterior, hoy obsoleta, delegaba en cambio la verificación en operadores de EigenLayer que la
+reejecutaban fuera de la cadena y cuyas firmas se agregaban~\cite{alignedarchive}, por lo que el
+resultado dependía de esos operadores y no únicamente de la prueba.
+
+Succinct, por último, no constituye una herramienta adicional, sino la organización que desarrolla
+SP1. Impulsa, además, una red de probadores en la que las aplicaciones solicitan pruebas de
+programas de SP1 y los probadores compiten por generarlas~\cite{succinctnetwork}. Esa red es una
+forma de obtener las pruebas, no un sistema de pruebas distinto, y el prototipo no la utiliza
+(Sección~\ref{sec:sp1_origen}).
+
+\begin{table}[htbp]
+	\centering
+	\caption{Herramientas y entornos del ecosistema de pruebas de conocimiento cero y su relación con
+	el caso de estudio.}
+	\label{tab:otros_zk}
+	\small
+	\begin{tabular}{>{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{3.4cm} >{\raggedright\arraybackslash}p{4.3cm} >{\raggedright\arraybackslash}p{4.3cm}}
+		\toprule
+		\textbf{Herramienta o entorno} & \textbf{Categoría} & \textbf{Función principal} &
+		\textbf{Relación con el caso de estudio} \\
+		\midrule
+		Noir & Lenguaje de dominio específico & Describir circuitos que un backend demuestra &
+		Implementación analizada (Sección~\ref{sec:noir}) \\
+		\addlinespace
+		SP1 & Máquina virtual de conocimiento cero & Demostrar la ejecución de programas en Rust &
+		Implementación analizada (Sección~\ref{sec:sp1}) \\
+		\addlinespace
+		RISC Zero & Máquina virtual de conocimiento cero & Demostrar programas en Rust, C y C++ & Alternativa dentro del enfoque de SP1 \\
+		\addlinespace
+		Cairo & Lenguaje y arquitectura de procesador & Programas demostrados con STARKs & Alternativa dentro del enfoque de ejecución, con instrucciones propias \\
+		\addlinespace
+		Halo2 & Biblioteca de sistemas de prueba & Circuitos de tipo PLONK con IPA o KZG, según la variante & Alternativa dentro del enfoque de circuitos de Noir \\
+		\addlinespace
+		Plonky3 & Biblioteca de primitivas criptográficas & Construir probadores basados en STARKs &
+		Antecedente reconocido de SP1 \\
+		\addlinespace
+		Aligned & Servicio de agregación de pruebas & Combinar pruebas ya generadas en una prueba agregada
+		verificable en Ethereum & Alternativa para la verificación en cadena de pruebas generadas con
+		otras herramientas \\
+		\addlinespace
+		Red de probadores de Succinct & Red de generación de pruebas & Generar pruebas de programas de
+		SP1 a solicitud & Modalidad de SP1 no utilizada por el prototipo \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+Las herramientas reseñadas en esta sección, con excepción de Noir y SP1, que figuran en la tabla
+como referencia, no se incorporaron a la evaluación experimental del presente trabajo, que se
+concentra en estas dos. El Capítulo~\ref{chp:zkbridge} describe la implementación del puente con
+Noir y SP1 y la metodología con que se comparan ambos enfoques.

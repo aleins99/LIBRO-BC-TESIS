@@ -17,23 +17,31 @@
 \pendiente{1.7}{Estructura del documento}{al final del Capítulo 1, después de Delimitación}{Sugerencia - Recomendado}{%
 	Párrafo breve que describe el contenido de cada capítulo.}
 
-\pendiente{4.3}{Metodología}{entre zkBridge de Berkeley RDI y Diseño e Implementación en Noir}{Necesario - Crítico}{%
-	Diseño experimental de la comparación entre Noir y SP1, métricas medidas, entorno de cómputo, número de repeticiones y criterios para que ambas implementaciones sean comparables. Las secciones de Noir y SP1 ya remiten a esta metodología.}
+\pendiente{4.2}{zkBridge de Berkeley RDI}{entre Implementación de un puente lock-and-mint y Diseño e implementación en Noir}{Necesario - Importante}{%
+	Propuesta de Xie et al.\ como referencia de diseño: red de relés, contrato actualizador de
+	encabezados y pruebas de inclusión sobre encabezados aceptados. Qué ideas retoma el puente del
+	presente trabajo y en qué se diferencia, sin presuponer que su arquitectura se adoptó
+	íntegramente.}
 
-\pendiente{4.5}{Diseño e Implementación en SP1}{entre Diseño e Implementación en Noir y Benchmarks}{Necesario - Crítico}{%
-	Implementación de la misma lógica de verificación en Rust para SP1, siguiendo la misma arquitectura y flujo de trabajo que la versión en Noir.}
+\pendiente{4.3}{Diseño e implementación en Noir}{después de zkBridge de Berkeley RDI}{Necesario - Crítico}{%
+	Expresión en Noir de los enunciados de consenso y de inclusión, codificación de sus entradas
+	públicas, generación de pruebas con Barretenberg, contrato verificador e integración con los
+	contratos y el \textit{relayer}.}
 
-\pendiente{4.6}{Contratos inteligentes y relayer}{entre Diseño e Implementación en SP1 y Benchmarks}{Necesario - Importante}{%
-	Contrato de bloqueo en la cadena de origen, contrato verificador y de acuñación en la cadena de destino, y funcionamiento del relayer como probador sin permisos.}
+\pendiente{4.4}{Diseño e implementación en SP1}{después de Diseño e implementación en Noir}{Necesario - Crítico}{%
+	Programas invitados y anfitriones de consenso y de inclusión, codificación de los valores
+	públicos, envoltura Groth16, contrato verificador e integración con los contratos y el
+	\textit{relayer}.}
 
-\pendiente{4.7}{Interfaz web y modo comparativo}{entre Contratos inteligentes y relayer y Benchmarks}{Sugerencia - Recomendado}{%
-	Interfaz de usuario y demostración experimental en la que el esquema clásico admite la acuñación fraudulenta y el esquema con verificación de conocimiento cero la rechaza.}
+\pendiente{4.5}{Metodología de comparación}{después de Diseño e implementación en SP1}{Necesario - Crítico}{%
+	Comprobaciones que acredita cada implementación y alcance comparable, métricas (tiempo de
+	generación de las pruebas, memoria, gas y complejidad de desarrollo), correspondencia entre las
+	etapas de Noir y de SP1, hardware, versiones y número de repeticiones.}
 
-\pendiente{4.9}{Análisis de seguridad}{después de Benchmarks}{Necesario - Importante}{%
-	Modelo de amenazas, supuestos de confianza del comité de sincronización, ataques considerados y protección contra el doble gasto de un mismo depósito.}
-
-\pendiente{4.10}{Discusión de resultados}{después de Análisis de seguridad}{Necesario - Importante}{%
-	Interpretación de las mediciones, comparación con el zkBridge de Berkeley RDI y limitaciones del estudio.}
+\pendiente{4.6}{Resultados y discusión}{después de Metodología de comparación}{Necesario - Crítico}{%
+	Mediciones de ambas implementaciones, despliegue en la red de destino, costo de verificación
+	en gas, discusión frente a la hipótesis y tratamiento de las limitaciones señaladas en la
+	Sección 4.1.3.}
 
 \pendiente{5.1}{Conclusiones}{al inicio del Capítulo 5}{Necesario - Crítico}{%
 	Conclusiones respecto de cada objetivo específico.}
