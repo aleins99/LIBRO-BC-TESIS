@@ -1,1 +1,187 @@
-\section{Implementación de un puente Lock-and-Mint}
+El Capítulo~\ref{chp:conocimiento_cero} presentó los sistemas de prueba y las dos herramientas con
+que el presente trabajo aborda el problema de los puentes descrito en la
+Sección~\ref{sec:puentes}. Este capítulo traslada esos fundamentos a un puente concreto, en el que
+la cadena de destino acuña un activo solo cuando verifica pruebas de que el bloqueo correspondiente
+ocurrió en la cadena de origen.
+
+La Sección~\ref{sec:lock_and_mint} describe la arquitectura común del puente, el flujo de una
+transferencia y las condiciones bajo las que se autoriza la acuñación. Las secciones siguientes
+reseñan zkBridge, de Berkeley RDI, como referencia de diseño, presentan el diseño y la
+implementación de las pruebas en Noir y en SP1 y exponen la metodología con que ambas se comparan
+y los resultados obtenidos.
+
+\section{Implementación de un puente lock-and-mint}
+\label{sec:lock_and_mint}
+
+El puente transfiere el token \texttt{GuaraniToken} desde una cadena de origen hacia una cadena de
+destino mediante el esquema \textit{lock-and-mint}. El presente trabajo implementa únicamente el
+flujo de ida, de modo que la operación inversa, de quema y liberación, queda fuera de su alcance.
+La descripción que sigue corresponde a la documentación y al código de la revisión del 12 de
+septiembre de 2026 del repositorio del puente~\cite{zkguaranibridgesp1}.
+
+\subsection{Arquitectura y componentes}
+\label{sec:puente_arquitectura}
+
+Conviene distinguir dos variantes del esquema. En el puente de referencia que describen Figueredo
+y Riquelme, un \textit{relayer} autorizado observa el bloqueo en la cadena de origen e invoca la
+acuñación en la de destino, cuyo contrato receptor comprueba únicamente que la llamada proviene de
+ese \textit{relayer} y que el identificador del bloqueo no se procesó antes, por lo que la
+corrección de cada acuñación depende por completo de su honestidad~\cite{figueredo2026zkbridge,
+guaranibridgevanilla}. En la variante que desarrolla el presente trabajo, el contrato de destino
+acuña solo tras verificar dos pruebas, y el \textit{relayer} pierde todo privilegio. Las garantías
+de una variante no se trasladan a la otra, y lo que sigue se refiere exclusivamente a la segunda.
+
+La arquitectura se compone de los siguientes elementos.
+\begin{itemize}
+	\item \texttt{GuaraniToken}, un token ERC-20 con símbolo GUA desplegado en ambas cadenas. En la
+	de origen se emite con un suministro inicial, y en la de destino se despliega sin suministro y
+	solo el contrato receptor recibe el rol que autoriza la acuñación.
+	\item \texttt{Sender}, el contrato de bloqueo en la cadena de origen. Su función
+	\lstinline[breaklines=true]|lock(recipientL2, amount)| exige un destinatario distinto de la dirección cero, un
+	monto positivo y una autorización de gasto suficiente, transfiere los tokens a su custodia,
+	registra el bloqueo y emite el evento \texttt{Locked}. Este contrato y el token se conservan
+	sin cambios respecto del prototipo de Figueredo y Riquelme, del que deriva el repositorio
+	según su historial de versiones~\cite{figueredo2026zkbridge, zkguaranibridgesp1}.
+	\item \texttt{BeaconLightClient}, en la cadena de destino, que verifica la prueba de consenso y
+	registra como anclado el hash del bloque de ejecución que esta certifica. Su propietario fija
+	los parámetros de política que la prueba no puede validar por sí sola, que son el dominio de
+	firma, el compromiso del comité de sincronización vigente y la posición del hash del bloque en
+	el encabezado de la cadena de baliza.
+	\item \texttt{ZKReceiver}, en la cadena de destino, que verifica la prueba de inclusión y acuña
+	los tokens. Sus funciones de acuñación son públicas, de modo que cualquier parte que disponga de
+	pruebas válidas puede invocarlas.
+	\item Un contrato verificador, en el que ambos contratos de destino delegan la comprobación
+	criptográfica de las pruebas.
+	\item El \textit{relayer}, un proceso en Node.js que se ejecuta fuera de las cadenas, detecta los
+	bloqueos, obtiene los datos de la cadena de origen, invoca los programas que generan las pruebas
+	y envía la operación a la cadena de destino. No forma parte del perímetro de confianza, ya que
+	los contratos no aceptan ningún dato suyo que no esté respaldado por una prueba.
+	\item Una interfaz web que permite al usuario conectar su billetera, autorizar el gasto, invocar
+	el bloqueo y seguir los eventos de bloqueo y de acuñación.
+\end{itemize}
+
+Las pruebas establecen dos enunciados enlazados por el hash del bloque de ejecución. La prueba de
+consenso establece que el comité de sincronización firmó un encabezado de la cadena de baliza del
+que se deriva ese hash, y la prueba de inclusión, que la transacción de bloqueo pertenece al bloque
+cuyo encabezado produce el mismo hash. Los contratos, el token, el \textit{relayer}, la interfaz y
+estos dos enunciados son comunes a las implementaciones en Noir y en SP1. La forma en que cada
+herramienta expresa y demuestra los enunciados, la codificación de sus valores públicos y el
+contrato verificador que corresponde a cada sistema de prueba se describen en las secciones
+dedicadas a cada una de ellas.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{tikzpicture}[
+		comp/.style = {draw, rounded corners, align=center, minimum height=0.95cm,
+			text width=2.45cm, font=\footnotesize},
+		dato/.style = {font=\scriptsize, align=center},
+		flecha/.style = {-{Stealth[length=2.2mm]}, thick},
+		doble/.style = {{Stealth[length=2.2mm]}-{Stealth[length=2.2mm]}, thick},
+		evento/.style = {-{Stealth[length=2.2mm]}, thick, dashed}
+	]
+		\node[comp] (usuario) at (0, 3.5) {Usuario e\\interfaz web};
+		\node[comp] (sender) at (0, 1.1) {\texttt{Sender}};
+		\node[comp] (token1) at (0, -1.1) {\texttt{GuaraniToken}};
+		\node[comp] (relayer) at (4.6, 1.1) {\textit{Relayer}};
+		\node[comp] (programas) at (4.6, 3.5) {Programas de\\consenso e inclusión};
+		\node[comp] (datos) at (4.6, -1.1) {Nodos de la\\cadena de origen};
+		\node[comp] (receiver) at (9.2, 1.1) {\texttt{ZKReceiver}};
+		\node[comp, text width=2.75cm] (light) at (9.2, -1.1) {{\ttfamily\scriptsize BeaconLightClient}};
+		\node[comp] (token2) at (13.5, 1.1) {\texttt{GuaraniToken}};
+		\node[comp] (verif) at (13.5, -1.1) {Contrato\\verificador};
+
+		\node[draw, dashed, rounded corners, inner sep=6pt, fit=(sender) (token1),
+			label={[font=\footnotesize]below:Cadena de origen}] {};
+		\node[draw, dashed, rounded corners, inner sep=6pt, fit=(receiver) (light) (token2) (verif),
+			label={[font=\footnotesize]below:Cadena de destino}] {};
+
+		\draw[flecha] (usuario) -- node[right, dato] {1. \texttt{approve}, \texttt{lock}} (sender);
+		\draw[flecha] (sender) -- node[right, dato] {custodia} (token1);
+		\draw[evento] (sender) -- node[above, dato] {\texttt{Locked}} (relayer);
+		\draw[doble] (relayer) -- node[right, dato] {2. recibo, bloque,\\comité} (datos);
+		\draw[doble] (relayer) -- node[right, dato] {3. entradas\\y pruebas} (programas);
+		\draw[flecha] (relayer) -- node[above, dato, pos=0.45] {4. pruebas} (receiver);
+		\draw[flecha] (receiver) -- node[above, dato] {5. \texttt{mint}} (token2);
+		\draw[flecha] (receiver) -- node[left, dato] {anclaje} (light);
+		\draw[flecha] (receiver) -- (verif);
+		\draw[flecha] (light) -- (verif);
+	\end{tikzpicture}
+	\caption{Arquitectura del puente y recorrido de una transferencia de ida. Las líneas
+	discontinuas indican eventos y los números, las etapas descritas en el texto.}
+	\label{fig:arquitectura_puente}
+\end{figure}
+
+\subsection{Flujo operativo de la transferencia}
+\label{sec:puente_flujo}
+
+La Figura~\ref{fig:arquitectura_puente} resume la arquitectura y el recorrido de una transferencia
+de ida, que se desarrolla en cinco etapas.
+
+\begin{enumerate}
+	\item \textbf{Solicitud y bloqueo.} El usuario autoriza al contrato \texttt{Sender} a transferir
+	sus tokens e invoca \lstinline|lock(recipientL2, amount)|. Si las comprobaciones del contrato se
+	cumplen, los tokens quedan en custodia y se emite el evento \texttt{Locked}. Los datos de la
+	llamada, es decir, el selector de la función, el destinatario y el monto, son los que el destino
+	utilizará más adelante.
+	\item \textbf{Detección y obtención de datos.} El \textit{relayer} detecta el evento, ya sea por
+	suscripción o por consulta periódica, y obtiene el recibo de la transacción para identificar el
+	bloque que la contiene. Con un nodo de la cadena de baliza obtiene los datos del comité de
+	sincronización que firmó ese bloque, y con un nodo de ejecución reconstruye el encabezado del
+	bloque y obtiene todas sus transacciones. El \textit{relayer} comprueba que el hash del
+	encabezado reconstruido y el de cada transacción coincidan con los que informa el nodo, y
+	detiene el proceso si no coinciden. Los datos del evento solo sirven para iniciar el proceso y
+	no se utilizan para acuñar.
+	\item \textbf{Generación de las pruebas.} El \textit{relayer} invoca el programa de consenso con
+	el encabezado de la cadena de baliza, la firma agregada del comité y la rama de Merkle que
+	conduce al hash del bloque de ejecución, y el programa de inclusión con el encabezado de
+	ejecución, las transacciones del bloque y la posición de la transacción de bloqueo. Cada
+	programa produce una prueba y sus valores públicos.
+	\item \textbf{Envío a destino.} Si el bloque todavía no está anclado, el \textit{relayer} envía
+	ambas pruebas en una única transacción a \lstinline|mintRemoteWithHeader|, junto con los datos
+	de la llamada de bloqueo, que no forman parte de los valores públicos. Si el bloque ya fue
+	anclado por otra operación, envía solo la prueba de inclusión a \lstinline|mintRemote|. En
+	ambos casos espera después el evento \texttt{Minted} para confirmar la operación.
+	\item \textbf{Comprobaciones y acuñación.} \texttt{ZKReceiver} solicita primero a
+	\texttt{BeaconLightClient} que verifique la prueba de consenso y ancle el bloque, verifica
+	después la prueba de inclusión y, si todas las condiciones de la
+	Sección~\ref{sec:puente_aceptacion} se cumplen, acuña el monto a favor del destinatario y emite
+	\texttt{Minted}. Cualquier comprobación fallida revierte la transacción completa, de modo que
+	nunca queda un bloque anclado con una acuñación fallida dentro de la misma llamada.
+\end{enumerate}
+
+\subsection{Condiciones de aceptación y modelo de confianza}
+\label{sec:puente_aceptacion}
+
+\texttt{BeaconLightClient} solo ancla un bloque cuando el contrato verificador acepta la prueba de
+consenso para la clave del programa correspondiente, la prueba declara válidas tanto la firma
+agregada como la rama de Merkle, el dominio, la posición del hash y el compromiso del comité
+coinciden con los fijados por el propietario, y participaron en la firma más de dos tercios de los
+miembros del comité. \texttt{ZKReceiver}, por su parte, solo acuña cuando el verificador acepta la
+prueba de inclusión para la clave de su programa, la prueba declara verificada la inclusión, la
+raíz de las transacciones proviene del encabezado y la transacción pudo interpretarse, el hash de
+ese encabezado está anclado, la transacción se dirigió al contrato \texttt{Sender}, los datos de
+la llamada coinciden en longitud y en hash con los comprometidos por la prueba y corresponden a
+una llamada a \texttt{lock} con una dirección bien formada y un monto positivo, y el par formado
+por el hash del bloque y la posición de la transacción no se procesó antes.
+
+Estas condiciones respaldan algunas de las afirmaciones que distingue la
+Sección~\ref{sec:circom_limitaciones}, pero no todas. La inclusión de la transacción y la
+vinculación de la raíz con un encabezado concreto quedan establecidas por la prueba de inclusión,
+y el destinatario y el monto se extraen de los datos de la transacción probada, por lo que el
+\textit{relayer} no puede alterarlos. La reutilización de una operación se impide mediante el
+registro de los pares ya procesados. La autenticidad del encabezado, en cambio, depende de la
+honestidad de la mayoría del comité de sincronización y de que el propietario de
+\texttt{BeaconLightClient} mantenga actualizado el compromiso del comité, que se renueva cada 256
+épocas~\cite{ethaltairbeacon}. Según la documentación de la revisión examinada, la rotación del
+comité se actualiza mediante una operación del propietario y no mediante una prueba, el contrato
+ancla cualquier bloque con una firma válida aunque no esté finalizado, y la prueba de inclusión no
+establece que la transacción de bloqueo se haya ejecutado con éxito, para lo cual se requeriría
+probar su recibo~\cite{zkguaranibridgesp1}. A ello se suman la corrección del contrato verificador
+y los supuestos del sistema de prueba que lo sustenta, incluida la configuración confiable cuando
+existe (Sección~\ref{sec:snarks_starks}).
+
+El \textit{relayer} queda, en consecuencia, fuera del perímetro de confianza en lo que respecta a
+la corrección de las acuñaciones, pero no en lo que respecta a su disponibilidad. Si deja de
+operar, ninguna transferencia se completa hasta que otra parte genere y envíe las pruebas, aunque
+nadie puede acuñar sin ellas. El tratamiento de las limitaciones señaladas en la versión evaluada
+se discute junto con los resultados del capítulo.

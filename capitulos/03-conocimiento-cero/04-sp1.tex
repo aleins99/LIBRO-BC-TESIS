@@ -358,17 +358,24 @@ por lo que su correspondencia se establece en la metodología del Capítulo~\ref
 La primera limitación se refiere, como en Noir, a la diferencia entre la expresividad del lenguaje
 y la corrección de la especificación. La máquina virtual garantiza que el programa se ejecutó
 correctamente, pero no que el programa compruebe lo que se pretende. Dado que las entradas están
-controladas por el probador, un programa que reciba como entrada la raíz contra la que verifica la
-inclusión de una transacción, en lugar de derivarla de un encabezado cuya autenticidad también
-compruebe, demuestra únicamente la inclusión respecto de una raíz arbitraria. Las distinciones de
+controladas por el probador, un valor recibido como entrada solo merece confianza en la medida en
+que algo lo autentique. Recibir como entrada la raíz contra la que se verifica la inclusión de una
+transacción no implica, por sí mismo, que esa raíz sea arbitraria. El problema surge cuando el
+programa no la autentica, por ejemplo derivándola de un encabezado cuya autenticidad también
+comprueba, y cuando la aplicación verificadora tampoco la contrasta con un valor de confianza
+mediante comprobaciones vinculadas a la prueba, como la comparación de un valor público de la
+prueba con un encabezado previamente aceptado. En ese caso, la prueba establece únicamente la
+inclusión respecto de una raíz elegida por el probador. Las distinciones de
 la Sección~\ref{sec:circom_limitaciones} entre inclusión, autenticidad y finalidad del bloque y
 éxito de la operación siguen siendo responsabilidad del programa y de la aplicación que lo
 utiliza.
 
-La segunda consideración es la identificación del programa. Toda modificación del código, de sus
-dependencias o de la cadena de compilación produce un ejecutable distinto y, en consecuencia, una
-clave de verificación distinta, de modo que el verificador debe fijar la clave correspondiente a
-una compilación concreta. Para que terceros puedan reproducir esa clave, la herramienta de
+La segunda consideración es la identificación del programa. Las modificaciones del código, de sus
+dependencias o de la cadena de compilación pueden alterar el ejecutable y, en consecuencia, la
+clave de verificación que se deriva de él. Por ese motivo, el verificador debe fijar la clave
+correspondiente al programa autorizado y comprobarla en cada verificación, y toda nueva
+compilación exige confirmar que la clave resultante coincide con la fijada o actualizar esta
+última de manera deliberada. Para que terceros puedan reproducir esa clave, la herramienta de
 compilación ofrece la opción de compilar dentro de un contenedor de Docker con el fin de obtener
 ejecutables reproducibles~\cite{sp1repo}. La verificación debe exigir, además, que la ejecución haya
 terminado con éxito, condición que el kit y el contrato verificador comprueban por defecto.

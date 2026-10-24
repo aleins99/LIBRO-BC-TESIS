@@ -14,3 +14,29 @@
 	Pruebas de fraude, período de impugnación y finalidad. Mensajería nativa con Ethereum y su
 	diferencia con el puente propuesto. Optimism Sepolia como cadena de destino en la que se
 	despliega el contrato verificador.}
+
+\pendiente{4.2}{zkBridge de Berkeley RDI}{entre Implementación de un puente lock-and-mint y Diseño e implementación en Noir}{Necesario - Importante}{%
+	Propuesta de Xie et al.\ como referencia de diseño: red de relés, contrato actualizador de
+	encabezados y pruebas de inclusión sobre encabezados aceptados. Qué ideas retoma el puente del
+	presente trabajo y en qué se diferencia, sin presuponer que su arquitectura se adoptó
+	íntegramente.}
+
+\pendiente{4.3}{Diseño e implementación en Noir}{después de zkBridge de Berkeley RDI}{Necesario - Crítico}{%
+	Expresión en Noir de los enunciados de consenso y de inclusión, codificación de sus entradas
+	públicas, generación de pruebas con Barretenberg, contrato verificador e integración con los
+	contratos y el \textit{relayer}.}
+
+\pendiente{4.4}{Diseño e implementación en SP1}{después de Diseño e implementación en Noir}{Necesario - Crítico}{%
+	Programas invitados y anfitriones de consenso y de inclusión, codificación de los valores
+	públicos, envoltura Groth16, contrato verificador e integración con los contratos y el
+	\textit{relayer}.}
+
+\pendiente{4.5}{Metodología de comparación}{después de Diseño e implementación en SP1}{Necesario - Crítico}{%
+	Comprobaciones que acredita cada implementación y alcance comparable, métricas (tiempo de
+	generación de las pruebas, memoria, gas y complejidad de desarrollo), correspondencia entre las
+	etapas de Noir y de SP1, hardware, versiones y número de repeticiones.}
+
+\pendiente{4.6}{Resultados y discusión}{después de Metodología de comparación}{Necesario - Crítico}{%
+	Mediciones de ambas implementaciones, despliegue en la red de destino, costo de verificación
+	en gas, discusión frente a la hipótesis y tratamiento de las limitaciones señaladas en la
+	Sección 4.1.3.}
