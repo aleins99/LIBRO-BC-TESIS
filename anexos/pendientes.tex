@@ -8,9 +8,44 @@
 	#5\par\medskip
 }
 
-\pendiente{2.4}{Optimism}{entre Aztec y Puentes}{Necesario - Importante}{%
-	Optimism y el OP Stack como rollup optimista de Ethereum. Estructura de bloques y
-	compatibilidad con la EVM, incluida la equivalencia de gas y de contratos precompilados.
-	Pruebas de fraude, período de impugnación y finalidad. Mensajería nativa con Ethereum y su
-	diferencia con el puente propuesto. Optimism Sepolia como cadena de destino en la que se
-	despliega el contrato verificador.}
+\pendiente{—}{Abstract}{Preliminares, después del Resumen}{Necesario - Crítico}{%
+	Traducción al inglés del título, el resumen y las palabras clave. El archivo actual contiene solo el texto de plantilla.}
+
+\pendiente{—}{Agradecimientos}{Preliminares, después de la Dedicatoria}{Sugerencia - Recomendado}{%
+	Texto de agradecimientos. El archivo actual contiene solo el título.}
+
+\pendiente{1.7}{Estructura del documento}{al final del Capítulo 1, después de Delimitación}{Sugerencia - Recomendado}{%
+	Párrafo breve que describe el contenido de cada capítulo.}
+
+\pendiente{4.3}{Metodología}{entre zkBridge de Berkeley RDI y Diseño e Implementación en Noir}{Necesario - Crítico}{%
+	Diseño experimental de la comparación entre Noir y SP1, métricas medidas, entorno de cómputo, número de repeticiones y criterios para que ambas implementaciones sean comparables. Las secciones de Noir y SP1 ya remiten a esta metodología.}
+
+\pendiente{4.5}{Diseño e Implementación en SP1}{entre Diseño e Implementación en Noir y Benchmarks}{Necesario - Crítico}{%
+	Implementación de la misma lógica de verificación en Rust para SP1, siguiendo la misma arquitectura y flujo de trabajo que la versión en Noir.}
+
+\pendiente{4.6}{Contratos inteligentes y relayer}{entre Diseño e Implementación en SP1 y Benchmarks}{Necesario - Importante}{%
+	Contrato de bloqueo en la cadena de origen, contrato verificador y de acuñación en la cadena de destino, y funcionamiento del relayer como probador sin permisos.}
+
+\pendiente{4.7}{Interfaz web y modo comparativo}{entre Contratos inteligentes y relayer y Benchmarks}{Sugerencia - Recomendado}{%
+	Interfaz de usuario y demostración experimental en la que el esquema clásico admite la acuñación fraudulenta y el esquema con verificación de conocimiento cero la rechaza.}
+
+\pendiente{4.9}{Análisis de seguridad}{después de Benchmarks}{Necesario - Importante}{%
+	Modelo de amenazas, supuestos de confianza del comité de sincronización, ataques considerados y protección contra el doble gasto de un mismo depósito.}
+
+\pendiente{4.10}{Discusión de resultados}{después de Análisis de seguridad}{Necesario - Importante}{%
+	Interpretación de las mediciones, comparación con el zkBridge de Berkeley RDI y limitaciones del estudio.}
+
+\pendiente{5.1}{Conclusiones}{al inicio del Capítulo 5}{Necesario - Crítico}{%
+	Conclusiones respecto de cada objetivo específico.}
+
+\pendiente{5.2}{Verificación de la hipótesis}{después de Conclusiones}{Necesario - Crítico}{%
+	Respuesta a la pregunta de investigación sobre las ventajas de SP1 frente a Noir.}
+
+\pendiente{5.3}{Trabajos futuros}{después de Verificación de la hipótesis}{Necesario - Importante}{%
+	Posibles extensiones, como el despliegue en redes principales, la verificación de la finalidad plena o la incorporación de otras cadenas.}
+
+\pendiente{A.1}{Código fuente de los circuitos}{en el Apéndice, reemplazando la sección de plantilla}{Sugerencia - Recomendado}{%
+	Fragmentos relevantes de los circuitos en Noir y de los programas en SP1.}
+
+\pendiente{A.2}{Entorno y datos de las mediciones}{en el Apéndice, después de Código fuente de los circuitos}{Sugerencia - Recomendado}{%
+	Especificaciones del equipo, versiones de las herramientas y tablas completas de las mediciones.}

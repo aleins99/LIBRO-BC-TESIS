@@ -1,0 +1,205 @@
+\section{Optimism}
+\label{sec:optimism}
+
+Optimism es una red de capa 2 de Ethereum del tipo \textit{rollup} optimista, construida sobre
+el OP Stack, un conjunto de componentes de código abierto que permite desplegar cadenas con la
+misma arquitectura~\cite{opstackoverview}. Su red de prueba, Optimism Sepolia, se apoya sobre la
+red de prueba Ethereum Sepolia y actúa en este trabajo como cadena de destino del puente, es decir,
+como la cadena en la que se despliegan el contrato verificador de las pruebas de conocimiento
+cero y el contrato que acuña los activos. La presente sección describe la arquitectura de
+Optimism, el ciclo de confirmación de sus bloques, su modelo de tarifas, el mecanismo de pruebas
+de fraude que sostiene su seguridad y el puente nativo que lo comunica con Ethereum, con el fin
+de precisar las propiedades de la cadena de destino que condicionan el diseño del puente.
+
+\subsection{Arquitectura del OP Stack}
+\label{sec:op_arquitectura}
+
+De acuerdo con la clasificación presentada en la Sección~\ref{sec:aztec_rollups}, Optimism
+ejecuta las transacciones fuera de Ethereum, publica en Ethereum los datos necesarios para
+reconstruir su estado y presume la validez de los estados resultantes mientras nadie demuestre lo
+contrario. Su especificación la describe como una cadena \textit{derivada}, puesto que su
+historia canónica queda definida exclusivamente por los datos publicados en la capa
+1~\cite{opstackoverview}. Cualquier nodo que lea dichos datos desde Ethereum y aplique las reglas
+de derivación obtiene la misma cadena que construyó el operador de la red.
+
+Al igual que un nodo de Ethereum posterior a \textit{The Merge} (Sección~\ref{sec:eth_capas}), un
+nodo de Optimism se compone de un cliente de consenso, denominado nodo de \textit{rollup}, y de un
+cliente de ejecución derivado de un cliente de Ethereum, ambos comunicados mediante la misma
+interfaz que utilizan los clientes de la capa 1. Sobre esta base, el OP Stack distingue cuatro
+funciones principales~\cite{opstackoverview}:
+
+\begin{itemize}
+	\item El \textbf{secuenciador} recibe las transacciones de los usuarios, las ordena y produce
+	los bloques de la capa 2. En Optimism Sepolia se produce un bloque cada dos
+	segundos~\cite{superchainopsepolia}.
+	\item El \textbf{publicador de lotes} (\textit{batcher}) comprime los bloques producidos y
+	publica sus datos en Ethereum, habitualmente en forma de \textit{blobs}, un tipo de dato
+	introducido por la propuesta EIP-4844 que ofrece un almacenamiento temporal más económico que
+	el \textit{calldata}~\cite{eip4844}.
+	\item El \textbf{proponente} (\textit{proposer}) publica periódicamente en Ethereum
+	\textit{raíces de salida} (\textit{output roots}), que son compromisos sobre el estado
+	completo de la capa 2 en un bloque determinado.
+	\item El \textbf{impugnador} (\textit{challenger}) vigila las raíces de salida publicadas y
+	las disputa cuando no coinciden con el estado que resulta de derivar la cadena.
+\end{itemize}
+
+En la capa 1, estas funciones se apoyan en un conjunto de contratos inteligentes. Entre ellos
+destaca el contrato \texttt{OptimismPortal}, que recibe los depósitos y procesa los retiros.
+También destaca el contrato \texttt{DisputeGameFactory}, que registra las raíces de salida y crea
+los juegos de disputa asociados a ellas~\cite{opspecsoverview}. La Figura~\ref{fig:op_arquitectura} representa la
+relación entre los componentes de ambas capas.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{tikzpicture}[
+		caja/.style={draw, rounded corners=2pt, align=center, minimum width=3.6cm,
+			minimum height=1.1cm, font=\small},
+		capa/.style={draw, dashed, rounded corners=4pt, inner sep=0.3cm},
+		flecha/.style={-{Stealth[length=2.2mm]}, thick},
+		etiqueta/.style={font=\footnotesize\itshape, align=center}
+		]
+		% Capa 2
+		\node[caja] (seq) at (0,0) {Secuenciador\\ (bloques cada 2~s)};
+		\node[caja] (bat) at (4.8,0) {Publicador\\ de lotes};
+		\node[caja] (prop) at (9.6,0) {Proponente};
+		% Capa 1
+		\node[caja] (portal) at (0,-3.6) {\texttt{OptimismPortal}\\ (depósitos y retiros)};
+		\node[caja] (blobs) at (4.8,-3.6) {Datos de lotes\\ (\textit{blobs})};
+		\node[caja] (dgf) at (9.6,-3.6) {\texttt{DisputeGameFactory}\\ (raíces de salida)};
+
+		\node[capa, fit=(seq)(bat)(prop), label={[font=\small\bfseries]above:Optimism (capa 2)}] {};
+		\node[capa, fit=(portal)(blobs)(dgf), label={[font=\small\bfseries]below:Ethereum (capa 1)}] {};
+
+		\draw[flecha] (seq) -- node[etiqueta, above] {bloques} (bat);
+		\draw[flecha] (bat) -- node[etiqueta, above] {estado} (prop);
+		\draw[flecha] (portal) -- node[etiqueta, right] {depósitos} (seq);
+		\draw[flecha] (bat) -- node[etiqueta, right] {lotes\\ comprimidos} (blobs);
+		\draw[flecha] (prop) -- node[etiqueta, right] {raíces\\ de salida} (dgf);
+		\draw[flecha] (dgf) -- node[etiqueta, above] {raíz aceptada} (portal);
+	\end{tikzpicture}
+	\caption{Componentes del OP Stack y su relación con los contratos desplegados en Ethereum.}
+	\label{fig:op_arquitectura}
+\end{figure}
+
+El secuenciador no puede excluir de forma indefinida los depósitos realizados en la capa 1. Las
+transacciones enviadas a \texttt{OptimismPortal} deben incorporarse a la capa 2 dentro de una
+ventana de secuenciación, que en Optimism Sepolia es de 3\,600 bloques de
+Ethereum~\cite{superchainopsepolia}, y en caso contrario las reglas de derivación las incluyen de
+todas formas~\cite{opspecsoverview}. Esta propiedad otorga a los usuarios resistencia a la
+censura aun cuando el secuenciador sea un operador único.
+
+\subsection{Confirmación de bloques y finalidad}
+\label{sec:op_finalidad}
+
+Dado que los bloques de Optimism se producen antes de que sus datos lleguen a Ethereum, un mismo
+bloque atraviesa distintos estados de confirmación a lo largo del tiempo. La
+Tabla~\ref{tab:op_estados} resume los tres estados que distingue el OP
+Stack~\cite{opstackoverview}.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Estados de confirmación de un bloque de Optimism.}
+	\label{tab:op_estados}
+	\small
+	\begin{tabular}{>{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{6.2cm} >{\raggedright\arraybackslash}p{5.4cm}}
+		\toprule
+		\textbf{Estado} & \textbf{Condición} & \textbf{Garantía} \\
+		\midrule
+		No seguro (\textit{unsafe}) & El secuenciador produjo el bloque y lo difundió por la red
+		\textit{peer-to-peer}. & Depende de la honestidad del secuenciador. \\
+		\addlinespace
+		Seguro (\textit{safe}) & Los datos del bloque fueron publicados en Ethereum y el bloque
+		puede derivarse a partir de ellos. & Depende de que el bloque de Ethereum que contiene los
+		datos no sea revertido. \\
+		\addlinespace
+		Finalizado (\textit{finalized}) & El bloque de Ethereum que contiene los datos alcanzó la
+		finalidad. & Equivalente a la finalidad de Ethereum
+		(Sección~\ref{sec:eth_consenso}). \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+Conviene distinguir este concepto de finalidad del que se aplica a los retiros hacia Ethereum.
+Un bloque finalizado de Optimism no puede ser revertido, puesto que sus datos forman parte de la
+historia finalizada de Ethereum y su contenido queda determinado por las reglas de derivación.
+Sin embargo, Ethereum no ejecuta esas reglas por sí mismo, de modo que solo acepta una afirmación
+sobre el estado de Optimism, como la existencia de un retiro, una vez que la raíz de salida
+correspondiente ha superado el período de impugnación descrito en la
+Sección~\ref{sec:op_fraude}.
+
+\subsection{Compatibilidad con la EVM y modelo de tarifas}
+\label{sec:op_tarifas}
+
+Optimism busca la \textbf{equivalencia con la EVM}, lo que significa que su cliente de ejecución
+reproduce el comportamiento de la máquina virtual de Ethereum con un número reducido de
+modificaciones, documentadas en su especificación~\cite{opspecsexec}. Los contratos escritos para
+Ethereum pueden desplegarse en Optimism sin cambios, y los contratos precompilados descritos en la
+Sección~\ref{sec:eth_gas}, incluidos los de la curva BN254, se encuentran disponibles con los
+mismos costos de gas. La actualización Isthmus incorporó, además, los precompilados de BLS12-381
+definidos en la propuesta EIP-2537~\cite{opisthmus, eip2537}. Esta propiedad permite que el
+contrato verificador generado por las herramientas de Noir y de SP1 para Ethereum se despliegue
+en Optimism Sepolia sin modificaciones.
+
+El modelo de tarifas, en cambio, presenta una diferencia relevante. Las transacciones de Optimism
+pagan la tarifa base y la propina del mecanismo EIP-1559 por su ejecución en la capa 2, y pagan
+además una \textbf{tarifa de datos de capa 1} (\textit{L1 data fee}), que cubre el costo de
+publicar sus datos en Ethereum~\cite{opspecsexec}. Esta segunda tarifa depende del tamaño de la
+transacción una vez comprimida y de los precios vigentes de \textit{blobs} y de gas en Ethereum,
+que la capa 2 conoce a través del contrato predesplegado \texttt{L1Block}. En consecuencia, el
+costo total de verificar una prueba en Optimism no depende solo del gas de ejecución, sino
+también del tamaño de la prueba y de las entradas públicas que se transmiten en la transacción.
+Por esta razón, en este trabajo el gas de ejecución consumido por la verificación se reporta por
+separado del costo monetario, que varía con las condiciones de ambas capas.
+
+\subsection{Pruebas de fraude}
+\label{sec:op_fraude}
+
+La seguridad de las raíces de salida de Optimism descansa en un sistema de pruebas de fraude
+habilitado sin permisos en la red principal desde junio de 2024~\cite{optimismfaultproofs}.
+Cuando un participante publica una raíz de salida, cualquier otro puede impugnarla depositando
+una garantía, lo que da inicio a un \textbf{juego de disputa}. En él, ambas partes acotan de
+forma iterativa, mediante bisección, el primer paso de la ejecución sobre el cual discrepan, hasta
+reducir el desacuerdo a una única instrucción. Esa instrucción se ejecuta entonces en un contrato
+de Ethereum que implementa la máquina virtual Cannon, la cual reproduce el programa de derivación
+y ejecución de Optimism compilado para una arquitectura MIPS~\cite{opcannon}. El resultado de esta
+ejecución determina qué parte tenía razón, y la parte equivocada pierde su garantía.
+
+Si ninguna impugnación prospera durante el período previsto, de aproximadamente siete días, la
+raíz de salida se considera válida y puede utilizarse para procesar retiros~\cite{optimismfaultproofs}.
+El modelo de seguridad resultante se apoya en el supuesto de que existe al menos un participante
+honesto que vigila la cadena y que puede publicar una impugnación en Ethereum dentro de ese plazo.
+Este supuesto es más débil que el de confiar en un operador concreto, pero difiere de la
+garantía que ofrece una prueba de validez, en la que la corrección del estado se verifica de forma
+inmediata y no depende de la vigilancia de terceros.
+
+\subsection{Puente nativo con Ethereum}
+\label{sec:op_puente_nativo}
+
+Optimism dispone de un puente nativo entre ambas capas, compuesto por los contratos
+\texttt{L1CrossDomainMessenger} y \texttt{L1StandardBridge} en Ethereum y sus equivalentes
+predesplegados en la capa 2~\cite{opspecsoverview}. En un \textbf{depósito}, el contrato de la
+capa 1 bloquea los activos y emite un mensaje a través de \texttt{OptimismPortal}, que la capa 2
+incorpora como una transacción especial capaz de acuñar los activos equivalentes. Como el
+contenido de la capa 2 se deriva de los datos de Ethereum, el depósito queda acreditado en pocos
+minutos y sin intervención de terceros.
+
+Un \textbf{retiro} sigue el camino inverso y requiere dos pasos en
+Ethereum~\cite{opspecswithdrawals}. Primero, el usuario \textit{prueba} el retiro, demostrando
+mediante una prueba de Merkle que el mensaje fue registrado en el contrato
+\texttt{L2ToL1MessagePasser} y que este registro forma parte de una raíz de salida publicada.
+Después, una vez transcurrido el período de impugnación y resuelto a favor el juego de disputa
+correspondiente, el usuario \textit{finaliza} el retiro y el contrato libera los activos
+bloqueados. La asimetría entre ambos sentidos refleja la naturaleza del \textit{rollup}
+optimista, puesto que la capa 2 conoce directamente el estado de Ethereum, mientras que Ethereum
+solo conoce el estado de Optimism a través de afirmaciones que deben superar el período de
+impugnación.
+
+La capa 2 conoce el estado de Ethereum porque cada bloque de Optimism comienza con una
+transacción del sistema que registra en el contrato \texttt{L1Block} el número, la marca de
+tiempo y el hash del bloque de Ethereum que le sirve de origen~\cite{opspecspredeploys}. El
+puente desarrollado en este trabajo no se apoya en este mecanismo, que es propio de la relación
+entre un \textit{rollup} y su capa 1, sino en la verificación de la firma del comité de
+sincronización de Ethereum descrita en la Sección~\ref{sec:eth_sync_committee}. De este modo, la
+solución resulta aplicable a cualquier cadena compatible con la EVM, con independencia de que
+mantenga o no una relación nativa con Ethereum, y Optimism Sepolia cumple el papel de entorno de
+validación representativo de una cadena de destino con costos de ejecución reducidos.
