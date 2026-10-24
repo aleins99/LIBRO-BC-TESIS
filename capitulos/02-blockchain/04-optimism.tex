@@ -148,8 +148,16 @@ transacción una vez comprimida y de los precios vigentes de \textit{blobs} y de
 que la capa 2 conoce a través del contrato predesplegado \texttt{L1Block}. En consecuencia, el
 costo total de verificar una prueba en Optimism no depende solo del gas de ejecución, sino
 también del tamaño de la prueba y de las entradas públicas que se transmiten en la transacción.
-Por esta razón, en este trabajo el gas de ejecución consumido por la verificación se reporta por
-separado del costo monetario, que varía con las condiciones de ambas capas.
+Por esta razón, en este trabajo el costo de verificación en la cadena de destino se reporta en
+dos magnitudes separadas. La primera es el gas de ejecución consumido por las operaciones de
+verificación, que depende únicamente de las instrucciones ejecutadas por los contratos y no del
+precio del gas. La segunda es el costo monetario de cada transacción, que resulta del producto
+entre el gas consumido y el precio efectivo del gas, al que se suma la tarifa de datos de capa 1.
+Esta última incide de manera significativa en el puente, puesto que las pruebas se transmiten
+como datos de la transacción y su tamaño se refleja en lo que Optimism cobra por publicarlas en
+Ethereum. El costo monetario se expresa en ether y en dólares, con indicación de la fecha del
+precio empleado, y se complementa con el costo de generar las pruebas fuera de la cadena, según
+se detalla en el Capítulo~\ref{chp:zkbridge}.
 
 \subsection{Pruebas de fraude}
 \label{sec:op_fraude}
@@ -197,9 +205,24 @@ impugnación.
 La capa 2 conoce el estado de Ethereum porque cada bloque de Optimism comienza con una
 transacción del sistema que registra en el contrato \texttt{L1Block} el número, la marca de
 tiempo y el hash del bloque de Ethereum que le sirve de origen~\cite{opspecspredeploys}. El
-puente desarrollado en este trabajo no se apoya en este mecanismo, que es propio de la relación
-entre un \textit{rollup} y su capa 1, sino en la verificación de la firma del comité de
-sincronización de Ethereum descrita en la Sección~\ref{sec:eth_sync_committee}. De este modo, la
-solución resulta aplicable a cualquier cadena compatible con la EVM, con independencia de que
-mantenga o no una relación nativa con Ethereum, y Optimism Sepolia cumple el papel de entorno de
-validación representativo de una cadena de destino con costos de ejecución reducidos.
+puente desarrollado en este trabajo no utiliza este mecanismo de forma deliberada, puesto que el
+contrato \texttt{L1Block} solo existe en las cadenas construidas con el OP Stack y el objetivo es
+que el puente pueda desplegarse en cadenas que no mantienen una relación nativa con Ethereum. La
+finalidad de Ethereum se ancla, en cambio, en un contrato de cliente ligero que solo acepta un
+bloque cuando una prueba de conocimiento cero demuestra tres afirmaciones. La primera es que al
+menos dos tercios del comité de sincronización firmaron el encabezado
+(Sección~\ref{sec:eth_sync_committee}). La segunda es que las claves públicas empleadas
+corresponden al compromiso del comité registrado en el contrato. La tercera es que un conjunto de
+ramas de Merkle vincula dicho encabezado con el bloque de ejecución, conforme a la cadena de
+compromisos de la Sección~\ref{sec:eth_cadena_verificacion}. Los detalles de este contrato se
+exponen en la Sección~\ref{sec:lock_and_mint}.
+
+Este mecanismo solo requiere que la cadena de destino verifique pruebas sucintas cuyos
+verificadores emplean los contratos precompilados de la curva BN254, disponibles en
+prácticamente cualquier cadena compatible con la EVM. La única salvedad identificada se refiere
+a las instrucciones que emite el compilador de Solidity. Las versiones recientes del compilador
+generan por defecto la instrucción \texttt{PUSH0}, introducida por la propuesta
+EIP-3855~\cite{eip3855}, de modo que en una cadena que no la admita los contratos deben
+compilarse para una versión anterior de la EVM, como la correspondiente a la actualización
+Paris. En este contexto, Optimism Sepolia cumple el papel de entorno de validación representativo
+de una cadena de destino compatible con la EVM y con costos de ejecución reducidos.

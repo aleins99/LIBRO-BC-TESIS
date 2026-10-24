@@ -255,10 +255,12 @@ vez, de una prueba de validez aceptada por el contrato de rollup.
 
 Esta garantía es posible porque Aztec y Ethereum comparten un contrato de asentamiento, ya que es
 Ethereum quien verifica las pruebas de Aztec y, por ende, conoce con certeza su estado. Dos
-cadenas independientes, como Ethereum Sepolia y Optimism Sepolia, no disponen de un mecanismo
-equivalente, puesto que ninguna verifica de forma nativa el consenso de la otra. El puente
-desarrollado en este trabajo traslada el principio de los rollups de validez a este escenario,
-reemplazando la verificación de la prueba de un rollup por la verificación de una prueba de
-conocimiento cero sobre la firma del comité de sincronización de Ethereum y sobre la inclusión del
-evento de bloqueo, según la cadena de compromisos descrita en la
-Sección~\ref{sec:eth_cadena_verificacion}.
+cadenas independientes no disponen de un mecanismo equivalente, puesto que ninguna verifica de
+forma nativa el consenso de la otra. El puente desarrollado en este trabajo traslada el
+principio de los rollups de validez a este escenario, reemplazando la verificación de la prueba
+de un rollup por la verificación de pruebas de conocimiento cero sobre la firma del comité de
+sincronización de Ethereum y sobre la inclusión del evento de bloqueo, según la cadena de
+compromisos descrita en la Sección~\ref{sec:eth_cadena_verificacion}. Aunque la cadena de
+destino empleada en la validación, Optimism Sepolia, sí mantiene una relación nativa con
+Ethereum, el diseño no hace uso de ella, según se expone en la
+Sección~\ref{sec:op_puente_nativo}.

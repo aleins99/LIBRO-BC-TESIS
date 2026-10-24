@@ -17,6 +17,24 @@
 \pendiente{1.7}{Estructura del documento}{al final del Capítulo 1, después de Delimitación}{Sugerencia - Recomendado}{%
 	Párrafo breve que describe el contenido de cada capítulo.}
 
+\pendiente{2.5.1}{Interoperabilidad y concepto de puente}{al inicio de la Sección 2.5 Puentes}{Necesario - Importante}{%
+	Definición de interoperabilidad y de puente entre cadenas, diferencia entre transferencia de activos y paso de mensajes, y componentes genéricos de un puente (contratos en origen y destino, y agente que transmite la información).}
+
+\pendiente{2.5.2}{Modelos de transferencia de activos}{después de Interoperabilidad y concepto de puente}{Necesario - Importante}{%
+	Esquemas lock-and-mint, burn-and-mint, lock-and-unlock con reservas de liquidez e intercambios atómicos. Incluye una tabla comparativa y una figura del flujo lock-and-mint con relayer de confianza.}
+
+\pendiente{2.5.3}{Modelos de verificación y supuestos de confianza}{después de Modelos de transferencia de activos}{Necesario - Crítico}{%
+	Clasificación según quién verifica el estado de la cadena de origen. Verificación externa (relayer único, multifirma, comités y MPC), verificación optimista con vigilantes, verificación nativa mediante clientes ligeros y clientes ligeros con pruebas de conocimiento cero. Incluye una tabla con supuesto de confianza, latencia y costo de cada modelo.}
+
+\pendiente{2.5.4}{Incidentes de seguridad}{después de Modelos de verificación y supuestos de confianza}{Necesario - Crítico}{%
+	Casos documentados como Ronin, Wormhole, Nomad, Harmony Horizon y Multichain, con fecha, monto, causa y modelo de verificación afectado. Incluye una tabla. Respalda la afirmación de la introducción sobre los puentes como componente más atacado.}
+
+\pendiente{2.5.5}{Puentes basados en pruebas de conocimiento cero}{después de Incidentes de seguridad}{Necesario - Importante}{%
+	Panorama de clientes ligeros verificados con pruebas de conocimiento cero, como zkBridge y los clientes ligeros de Ethereum basados en el comité de sincronización. Debe ser breve y remitir a la Sección 4.2 para el análisis de zkBridge.}
+
+\pendiente{2.5.6}{Requisitos del puente propuesto}{al final de la Sección 2.5 Puentes}{Sugerencia - Recomendado}{%
+	Síntesis de los requisitos que se derivan del capítulo y enlace con el Capítulo 4.}
+
 \pendiente{4.2}{zkBridge de Berkeley RDI}{entre Implementación de un puente lock-and-mint y Diseño e implementación en Noir}{Necesario - Importante}{%
 	Propuesta de Xie et al.\ como referencia de diseño: red de relés, contrato actualizador de
 	encabezados y pruebas de inclusión sobre encabezados aceptados. Qué ideas retoma el puente del
@@ -36,7 +54,13 @@
 \pendiente{4.5}{Metodología de comparación}{después de Diseño e implementación en SP1}{Necesario - Crítico}{%
 	Comprobaciones que acredita cada implementación y alcance comparable, métricas (tiempo de
 	generación de las pruebas, memoria, gas y complejidad de desarrollo), correspondencia entre las
-	etapas de Noir y de SP1, hardware, versiones y número de repeticiones.}
+	etapas de Noir y de SP1, hardware, versiones y número de repeticiones. Los costos se reportan
+	en tres ejes, ya anunciados en la Sección 2.4.3. El primero es el gas de ejecución de
+	\texttt{update()} del cliente ligero, que se paga una vez por anclaje y se comparte entre todos los bloqueos que ancla, y de
+	\texttt{release()}. El segundo es el costo monetario en Optimism Sepolia, calculado como
+	\texttt{gasUsed} $\times$ \texttt{effectiveGasPrice} + \texttt{l1Fee} y convertido a ETH y USD con la
+	fecha del precio. El tercero es el costo de generar las pruebas fuera de la cadena, en tiempo,
+	memoria máxima y, si corresponde, costo de la máquina en la nube, por circuito y agregado.}
 
 \pendiente{4.6}{Resultados y discusión}{después de Metodología de comparación}{Necesario - Crítico}{%
 	Mediciones de ambas implementaciones, despliegue en la red de destino, costo de verificación
