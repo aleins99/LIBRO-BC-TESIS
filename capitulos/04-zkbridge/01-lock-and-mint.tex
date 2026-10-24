@@ -1,8 +1,11 @@
 El Capítulo~\ref{chp:conocimiento_cero} presentó los sistemas de prueba y las dos herramientas con
 que el presente trabajo aborda el problema de los puentes descrito en la
 Sección~\ref{sec:puentes}. Este capítulo traslada esos fundamentos a un puente concreto, en el que
-la cadena de destino acuña un activo solo cuando verifica pruebas de que el bloqueo correspondiente
-ocurrió en la cadena de origen.
+la cadena de destino acuña un activo solo cuando verifica pruebas de que una transacción que invoca
+la función de bloqueo fue incluida en un bloque de la cadena de origen firmado por su comité de
+sincronización. Como se precisa en la Sección~\ref{sec:puente_aceptacion}, estas pruebas no
+acreditan que dicha llamada se haya ejecutado con éxito ni que el bloque haya alcanzado la
+finalidad.
 
 La Sección~\ref{sec:lock_and_mint} describe la arquitectura común del puente, el flujo de una
 transferencia y las condiciones bajo las que se autoriza la acuñación. Las secciones siguientes
@@ -22,13 +25,14 @@ septiembre de 2026 del repositorio del puente~\cite{zkguaranibridgesp1}.
 \subsection{Arquitectura y componentes}
 \label{sec:puente_arquitectura}
 
-Conviene distinguir dos variantes del esquema. En el puente de referencia que describen Figueredo
-y Riquelme, un \textit{relayer} autorizado observa el bloqueo en la cadena de origen e invoca la
+Conviene distinguir dos variantes del esquema. En el puente de referencia descrito en un trabajo previo de la
+misma institución, un \textit{relayer} autorizado observa el bloqueo en la cadena de origen e invoca la
 acuñación en la de destino, cuyo contrato receptor comprueba únicamente que la llamada proviene de
 ese \textit{relayer} y que el identificador del bloqueo no se procesó antes, por lo que la
 corrección de cada acuñación depende por completo de su honestidad~\cite{figueredo2026zkbridge,
 guaranibridgevanilla}. En la variante que desarrolla el presente trabajo, el contrato de destino
-acuña solo tras verificar dos pruebas, y el \textit{relayer} pierde todo privilegio. Las garantías
+acuña solo tras verificar dos pruebas, y el \textit{relayer} deja de contar con un permiso
+exclusivo, ya que cualquier parte puede presentar esas pruebas y solicitar la acuñación. Las garantías
 de una variante no se trasladan a la otra, y lo que sigue se refiere exclusivamente a la segunda.
 
 La arquitectura se compone de los siguientes elementos.
@@ -40,7 +44,7 @@ La arquitectura se compone de los siguientes elementos.
 	\lstinline[breaklines=true]|lock(recipientL2, amount)| exige un destinatario distinto de la dirección cero, un
 	monto positivo y una autorización de gasto suficiente, transfiere los tokens a su custodia,
 	registra el bloqueo y emite el evento \texttt{Locked}. Este contrato y el token se conservan
-	sin cambios respecto del prototipo de Figueredo y Riquelme, del que deriva el repositorio
+	sin cambios respecto del prototipo de ese trabajo previo, del que deriva el repositorio
 	según su historial de versiones~\cite{figueredo2026zkbridge, zkguaranibridgesp1}.
 	\item \texttt{BeaconLightClient}, en la cadena de destino, que verifica la prueba de consenso y
 	registra como anclado el hash del bloque de ejecución que esta certifica. Su propietario fija
@@ -54,16 +58,18 @@ La arquitectura se compone de los siguientes elementos.
 	criptográfica de las pruebas.
 	\item El \textit{relayer}, un proceso en Node.js que se ejecuta fuera de las cadenas, detecta los
 	bloqueos, obtiene los datos de la cadena de origen, invoca los programas que generan las pruebas
-	y envía la operación a la cadena de destino. No forma parte del perímetro de confianza, ya que
-	los contratos no aceptan ningún dato suyo que no esté respaldado por una prueba.
+	y envía la operación a la cadena de destino. Los contratos no le reconocen ningún permiso
+	exclusivo ni aceptan como parámetro de la acuñación ningún dato suyo que no esté comprometido
+	por una prueba, aunque su disponibilidad condiciona que las transferencias se completen.
 	\item Una interfaz web que permite al usuario conectar su billetera, autorizar el gasto, invocar
 	el bloqueo y seguir los eventos de bloqueo y de acuñación.
 \end{itemize}
 
 Las pruebas establecen dos enunciados enlazados por el hash del bloque de ejecución. La prueba de
 consenso establece que el comité de sincronización firmó un encabezado de la cadena de baliza del
-que se deriva ese hash, y la prueba de inclusión, que la transacción de bloqueo pertenece al bloque
-cuyo encabezado produce el mismo hash. Los contratos, el token, el \textit{relayer}, la interfaz y
+que se deriva ese hash, y la prueba de inclusión, que la transacción que invoca \texttt{lock}
+pertenece al bloque cuyo encabezado produce el mismo hash. Ninguno de los dos establece que esa
+llamada se haya ejecutado con éxito. Los contratos, el token, el \textit{relayer}, la interfaz y
 estos dos enunciados son comunes a las implementaciones en Noir y en SP1. La forma en que cada
 herramienta expresa y demuestra los enunciados, la codificación de sus valores públicos y el
 contrato verificador que corresponde a cada sistema de prueba se describen en las secciones
@@ -132,8 +138,9 @@ de ida, que se desarrolla en cinco etapas.
 	detiene el proceso si no coinciden. Los datos del evento solo sirven para iniciar el proceso y
 	no se utilizan para acuñar.
 	\item \textbf{Generación de las pruebas.} El \textit{relayer} invoca el programa de consenso con
-	el encabezado de la cadena de baliza, la firma agregada del comité y la rama de Merkle que
-	conduce al hash del bloque de ejecución, y el programa de inclusión con el encabezado de
+	el encabezado de la cadena de baliza, las claves públicas del comité, el vector de
+	participación, la firma agregada y la rama de Merkle que conduce al hash del bloque de
+	ejecución, y el programa de inclusión con el encabezado de
 	ejecución, las transacciones del bloque y la posición de la transacción de bloqueo. Cada
 	programa produce una prueba y sus valores públicos.
 	\item \textbf{Envío a destino.} Si el bloque todavía no está anclado, el \textit{relayer} envía
@@ -141,22 +148,28 @@ de ida, que se desarrolla en cinco etapas.
 	de la llamada de bloqueo, que no forman parte de los valores públicos. Si el bloque ya fue
 	anclado por otra operación, envía solo la prueba de inclusión a \lstinline|mintRemote|. En
 	ambos casos espera después el evento \texttt{Minted} para confirmar la operación.
-	\item \textbf{Comprobaciones y acuñación.} \texttt{ZKReceiver} solicita primero a
-	\texttt{BeaconLightClient} que verifique la prueba de consenso y ancle el bloque, verifica
-	después la prueba de inclusión y, si todas las condiciones de la
-	Sección~\ref{sec:puente_aceptacion} se cumplen, acuña el monto a favor del destinatario y emite
-	\texttt{Minted}. Cualquier comprobación fallida revierte la transacción completa, de modo que
-	nunca queda un bloque anclado con una acuñación fallida dentro de la misma llamada.
+	\item \textbf{Comprobaciones y acuñación.} Las comprobaciones dependen de la ruta utilizada en
+	la etapa anterior. Con \lstinline|mintRemoteWithHeader|, el contrato \texttt{ZKReceiver}
+	solicita primero a \texttt{BeaconLightClient} que verifique la prueba de consenso y ancle el bloque que esta
+	certifica. Con \lstinline|mintRemote| omite ese paso y se apoya en el anclaje registrado por una
+	operación anterior, sin volver a verificar la prueba que lo produjo. En ambos casos verifica
+	después la prueba de inclusión, exige que el bloque de la transacción probada figure como anclado
+	y, si se cumplen las demás condiciones de la Sección~\ref{sec:puente_aceptacion}, acuña el monto
+	a favor del destinatario y emite \texttt{Minted}. Cualquier comprobación fallida revierte los
+	cambios realizados dentro de la misma transacción, de modo que con
+	\lstinline|mintRemoteWithHeader| el anclaje no persiste si la acuñación falla. Un anclaje
+	registrado en una transacción anterior, en cambio, se conserva aunque falle una solicitud de
+	acuñación posterior.
 \end{enumerate}
 
 \subsection{Condiciones de aceptación y modelo de confianza}
 \label{sec:puente_aceptacion}
 
 \texttt{BeaconLightClient} solo ancla un bloque cuando el contrato verificador acepta la prueba de
-consenso para la clave del programa correspondiente, la prueba declara válidas tanto la firma
-agregada como la rama de Merkle, el dominio, la posición del hash y el compromiso del comité
-coinciden con los fijados por el propietario, y participaron en la firma más de dos tercios de los
-miembros del comité. \texttt{ZKReceiver}, por su parte, solo acuña cuando el verificador acepta la
+consenso para la clave del programa correspondiente, la prueba declara válida la firma, condición
+que el programa solo establece si la firma agregada y la rama de Merkle son correctas y
+participaron en ella más de dos tercios de los miembros del comité, y el dominio, la posición del
+hash y el compromiso del comité coinciden con los fijados por el propietario. \texttt{ZKReceiver}, por su parte, solo acuña cuando el verificador acepta la
 prueba de inclusión para la clave de su programa, la prueba declara verificada la inclusión, la
 raíz de las transacciones proviene del encabezado y la transacción pudo interpretarse, el hash de
 ese encabezado está anclado, la transacción se dirigió al contrato \texttt{Sender}, los datos de
@@ -180,8 +193,19 @@ probar su recibo~\cite{zkguaranibridgesp1}. A ello se suman la corrección del c
 y los supuestos del sistema de prueba que lo sustenta, incluida la configuración confiable cuando
 existe (Sección~\ref{sec:snarks_starks}).
 
-El \textit{relayer} queda, en consecuencia, fuera del perímetro de confianza en lo que respecta a
-la corrección de las acuñaciones, pero no en lo que respecta a su disponibilidad. Si deja de
-operar, ninguna transferencia se completa hasta que otra parte genere y envíe las pruebas, aunque
-nadie puede acuñar sin ellas. El tratamiento de las limitaciones señaladas en la versión evaluada
+El papel del \textit{relayer} admite, en consecuencia, varias distinciones. Los contratos de
+destino no le otorgan un permiso exclusivo, ya que \lstinline|updateHeader|,
+\lstinline|mintRemote| y \lstinline|mintRemoteWithHeader| pueden ser invocadas por cualquier
+parte. Las comprobaciones de \texttt{ZKReceiver} y de los programas probados impiden, por su parte,
+que quien presenta las pruebas determine el bloque, la transacción, el destinatario o el monto al
+margen de lo que estas comprometen, o que reutilice una operación ya procesada. Esas comprobaciones
+no bastan, sin embargo, para afirmar que toda acuñación responde a un bloqueo efectivo de tokens,
+ya que el receptor no verifica el estado de ejecución de la transacción, la emisión del evento
+\texttt{Locked} ni la finalidad del bloque. La detección de ese evento por el \textit{relayer}
+habitual es una condición de su propio funcionamiento y no una exigencia del receptor, de modo que
+las comprobaciones descritas no distinguen una llamada a \texttt{lock} incluida pero revertida, ni
+un bloque firmado que no llegue a finalizarse, de una operación completada en un bloque final.
+Finalmente, el \textit{relayer} sigue siendo relevante para la disponibilidad del servicio, puesto
+que si deja de operar ninguna transferencia se completa hasta que otra parte genere y envíe las
+pruebas. El tratamiento de las limitaciones señaladas en la versión evaluada
 se discute junto con los resultados del capítulo.
