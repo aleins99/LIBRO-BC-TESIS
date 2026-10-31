@@ -49,6 +49,13 @@ También destaca el contrato \texttt{DisputeGameFactory}, que registra las raíc
 los juegos de disputa asociados a ellas~\cite{opspecsoverview}. La Figura~\ref{fig:op_arquitectura} representa la
 relación entre los componentes de ambas capas.
 
+El secuenciador no puede excluir de forma indefinida los depósitos realizados en la capa 1. Las
+transacciones enviadas a \texttt{OptimismPortal} deben incorporarse a la capa 2 dentro de una
+ventana de secuenciación, que en Optimism Sepolia es de 3\,600 bloques de
+Ethereum~\cite{superchainopsepolia}, y en caso contrario las reglas de derivación las incluyen de
+todas formas~\cite{opspecsoverview}. Esta propiedad otorga a los usuarios resistencia a la
+censura aun cuando el secuenciador sea un operador único.
+
 \begin{figure}[htbp]
 	\centering
 	\begin{tikzpicture}[
@@ -80,13 +87,6 @@ relación entre los componentes de ambas capas.
 	\caption{Componentes del OP Stack y su relación con los contratos desplegados en Ethereum.}
 	\label{fig:op_arquitectura}
 \end{figure}
-
-El secuenciador no puede excluir de forma indefinida los depósitos realizados en la capa 1. Las
-transacciones enviadas a \texttt{OptimismPortal} deben incorporarse a la capa 2 dentro de una
-ventana de secuenciación, que en Optimism Sepolia es de 3\,600 bloques de
-Ethereum~\cite{superchainopsepolia}, y en caso contrario las reglas de derivación las incluyen de
-todas formas~\cite{opspecsoverview}. Esta propiedad otorga a los usuarios resistencia a la
-censura aun cuando el secuenciador sea un operador único.
 
 \subsection{Confirmación de bloques y finalidad}
 \label{sec:op_finalidad}

@@ -35,17 +35,6 @@
 \pendiente{2.5.6}{Requisitos del puente propuesto}{al final de la Sección 2.5 Puentes}{Sugerencia - Recomendado}{%
 	Síntesis de los requisitos que se derivan del capítulo y enlace con el Capítulo 4.}
 
-\pendiente{4.2}{zkBridge de Berkeley RDI}{entre Implementación de un puente lock-and-mint y Diseño e implementación en Noir}{Necesario - Importante}{%
-	Propuesta de Xie et al.\ como referencia de diseño: red de relés, contrato actualizador de
-	encabezados y pruebas de inclusión sobre encabezados aceptados. Qué ideas retoma el puente del
-	presente trabajo y en qué se diferencia, sin presuponer que su arquitectura se adoptó
-	íntegramente.}
-
-\pendiente{4.3}{Diseño e implementación en Noir}{después de zkBridge de Berkeley RDI}{Necesario - Crítico}{%
-	Expresión en Noir de los enunciados de consenso y de inclusión, codificación de sus entradas
-	públicas, generación de pruebas con Barretenberg, contrato verificador e integración con los
-	contratos y el \textit{relayer}.}
-
 \pendiente{4.4}{Diseño e implementación en SP1}{después de Diseño e implementación en Noir}{Necesario - Crítico}{%
 	Programas invitados y anfitriones de consenso y de inclusión, codificación de los valores
 	públicos, envoltura Groth16, contrato verificador e integración con los contratos y el
@@ -60,7 +49,10 @@
 	\texttt{release()}. El segundo es el costo monetario en Optimism Sepolia, calculado como
 	\texttt{gasUsed} $\times$ \texttt{effectiveGasPrice} + \texttt{l1Fee} y convertido a ETH y USD con la
 	fecha del precio. El tercero es el costo de generar las pruebas fuera de la cadena, en tiempo,
-	memoria máxima y, si corresponde, costo de la máquina en la nube, por circuito y agregado.}
+	memoria máxima y, si corresponde, costo de la máquina en la nube, por circuito y agregado.
+	Cada medición debe identificar la revisión del código de Noir y de SP1 con que se obtuvo, y
+	ambas revisiones deben verificar el recibo y exigir el éxito de la transacción de bloqueo. Las
+	mediciones anteriores a esa verificación corresponden a otro enunciado y no son comparables.}
 
 \pendiente{4.6}{Resultados y discusión}{después de Metodología de comparación}{Necesario - Crítico}{%
 	Mediciones de ambas implementaciones, despliegue en la red de destino, costo de verificación

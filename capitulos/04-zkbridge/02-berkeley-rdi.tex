@@ -1,1 +1,46 @@
 \section{zkBridge de Berkeley RDI}
+\label{sec:zkbridge_berkeley}
+
+Una cadena de destino no puede consultar directamente el estado de otra cadena, de modo que, antes
+de actuar sobre un dato proveniente de ella, necesita establecer que ese dato pertenece a un bloque
+aceptado por el consenso de la cadena de origen. Ejecutar en un contrato las reglas de un cliente
+ligero evitaría recurrir a un comité externo, pero verificar en destino las firmas y transiciones
+que exigen puede resultar prohibitivo. La propuesta zkBridge, de Xie et
+al., traslada esa ejecución fuera de la cadena y envía al contrato de destino el nuevo encabezado
+junto con una prueba sucinta de que satisface la regla de validación del cliente
+ligero~\cite{xie2022zkbridge}.
+
+Los nodos de la red de retransmisión consultan varios nodos completos de la cadena de origen,
+obtienen el encabezado que sucede al último registrado y demuestran que la regla de validación,
+aplicada al estado vigente del cliente ligero y al encabezado anterior, acepta el nuevo. El contrato
+actualizador (\textit{updater contract}) comprueba que el encabezado anterior ya figure en su
+registro y que la prueba sea válida respecto del estado que mantiene, y solo entonces actualiza ese
+estado e incorpora el encabezado, que las aplicaciones consultan mediante una interfaz independiente
+de su lógica. La participación en la retransmisión es abierta: el contrato verifica la prueba sin
+necesidad de confiar en quien la presenta. Para que el puente siga incorporando encabezados, debe
+haber al menos un retransmisor honesto que los envíe. El análisis de los autores supone además que
+la cadena de origen mantiene la consistencia y sigue progresando, que su protocolo de cliente ligero
+es seguro y que el sistema de pruebas es sólido~\cite{xie2022zkbridge}.
+
+Aceptar un encabezado no autoriza por sí solo ninguna operación, porque el encabezado únicamente
+compromete el contenido del bloque mediante raíces de Merkle. En zkBridge, el contrato receptor de
+cada aplicación obtiene el encabezado del actualizador y verifica contra la raíz correspondiente una
+prueba adicional de que un dato concreto, como la
+inclusión de una transacción, pertenece al bloque. Que un encabezado aceptado no quede luego fuera
+de la cadena canónica depende, a su vez, de que el verificador del cliente ligero rechace
+encabezados que puedan quedar huérfanos y del criterio de confirmación con que se extrae la cadena
+principal del registro~\cite{xie2022zkbridge}.
+
+\begin{sloppypar}
+En su tesis de grado en la FP-UNA, Figueredo Camé y Riquelme Godoy reseñaron la propuesta de
+Berkeley y construyeron su prototipo a partir de una implementación abierta de
+zkBridge~\cite{figueredo2026zkbridge}. El prototipo actual presenta una
+separación semejante, en la que \texttt{BeaconLightClient} registra el hash del bloque de ejecución
+certificado por la prueba de consenso y \texttt{ZKReceiver} comprueba la inclusión y la ejecución
+exitosa de la transacción antes de acuñar (Sección~\ref{sec:puente_arquitectura}). La ruta \lstinline|mintRemote| ilustra esa
+división, ya que el receptor aprovecha un anclaje previo sin que se vuelva a presentar la prueba que
+lo estableció. Se trata de una semejanza de diseño y no de una equivalencia de garantías, puesto que
+el prototipo no encadena cada encabezado con su predecesor, recibe el compromiso del comité de su
+propietario y puede anclar bloques no finalizados (Sección~\ref{sec:puente_aceptacion}). La sección siguiente aborda la expresión en Noir de los
+enunciados de consenso y de inclusión.
+\end{sloppypar}

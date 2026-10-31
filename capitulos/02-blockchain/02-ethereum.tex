@@ -255,9 +255,9 @@ compatibilidad del formato~\cite{eip3675}. Las actualizaciones posteriores del p
 añadieron campos nuevos, entre ellos la raíz del bloque de consenso predecesor
 (\texttt{parentBeaconBlockRoot}), que permite a los contratos de la propia cadena acceder a los
 compromisos de la capa de consenso~\cite{eip4788}. Del conjunto de campos descritos, el puente
-desarrollado en este trabajo se apoya principalmente en \texttt{receiptsRoot}, puesto que es el
-compromiso que permite demostrar que una transacción de bloqueo se ejecutó con éxito y emitió el
-evento correspondiente.
+desarrollado en este trabajo se apoya en \texttt{transactionsRoot}, que permite demostrar la
+inclusión de la transacción de bloqueo, y en \texttt{receiptsRoot}, que permite demostrar que esa
+transacción se ejecutó con éxito.
 
 \subsection{Árboles de Merkle-Patricia}
 \label{sec:eth_mpt}
@@ -300,8 +300,8 @@ acumulado consumido en el bloque hasta esa transacción, un filtro de Bloom y la
 emitidos. La distinción entre la inclusión de una transacción y su ejecución exitosa es
 relevante para un puente, ya que una transacción revertida figura igualmente en el árbol de
 transacciones a pesar de no haber modificado el estado. Por esta razón, la prueba que necesita el
-puente no se refiere al árbol de transacciones, sino al árbol de recibos, en el que el código de
-estado y el evento de bloqueo pueden comprobarse de manera conjunta.
+puente no puede limitarse al árbol de transacciones y debe abarcar también el árbol de recibos,
+en el que puede comprobarse el código de estado de la transacción de bloqueo.
 
 \subsection{Consenso y finalidad}
 \label{sec:eth_consenso}
@@ -391,19 +391,6 @@ controlar una fracción comparable del conjunto total es despreciable. Este supu
 que adoptan los clientes ligeros de Ethereum y constituye la raíz de confianza del puente
 desarrollado en este trabajo.
 
-\subsection{Cadena de verificación para el puente}
-\label{sec:eth_cadena_verificacion}
-
-Los elementos descritos en esta sección permiten construir una cadena de compromisos
-criptográficos que vincula un evento emitido por un contrato con la firma del comité de
-sincronización, como se ilustra en la Figura~\ref{fig:eth_cadena_confianza}. El punto de partida
-es un comité conocido, cuya firma agregada certifica la raíz de un encabezado de consenso
-finalizado. Desde ese encabezado, una prueba de Merkle SSZ respecto de \texttt{body\_root}
-conduce al encabezado de ejecución y, en particular, a su campo \texttt{receiptsRoot}. Una prueba
-de inclusión en el árbol de Merkle-Patricia de recibos demuestra, finalmente, que el recibo de la
-transacción de bloqueo pertenece al bloque, que su ejecución fue exitosa y que contiene el evento
-emitido por el contrato del puente con los parámetros del depósito.
-
 \begin{figure}[htbp]
 	\centering
 	\begin{tikzpicture}[
@@ -414,7 +401,9 @@ emitido por el contrato del puente con los parámetros del depósito.
 		etiqueta/.style={font=\footnotesize\itshape, align=left, anchor=west}
 		]
 		\node[caja] (comite) {Comité de sincronización $\mathcal{C}$ (512 claves BLS)};
-		\node[caja, below=of comite] (consenso) {Encabezado de consenso finalizado\\
+		\node[caja, below=of comite] (atestiguado) {Encabezado de consenso atestiguado\\
+			(\texttt{slot}, \texttt{parent\_root}, \texttt{state\_root}, \texttt{body\_root})};
+		\node[caja, below=of atestiguado] (consenso) {Encabezado de consenso finalizado\\
 			(\texttt{slot}, \texttt{parent\_root}, \texttt{state\_root}, \texttt{body\_root})};
 		\node[caja, below=of consenso] (ejecucion) {Encabezado de ejecución\\
 			(\texttt{stateRoot}, \texttt{transactionsRoot}, \texttt{receiptsRoot})};
@@ -423,10 +412,12 @@ emitido por el contrato del puente con los parámetros del depósito.
 		\node[caja, below=of recibo] (evento) {Evento de bloqueo\\
 			(contrato emisor, destinatario, monto)};
 
-		\draw[flecha] (comite) -- (consenso)
+		\draw[flecha] (comite) -- (atestiguado)
 			node[etiqueta, midway, xshift=4.25cm] {firma BLS agregada};
+		\draw[flecha] (atestiguado) -- (consenso)
+			node[etiqueta, midway, xshift=4.25cm] {prueba de Merkle SSZ (\texttt{state\_root})};
 		\draw[flecha] (consenso) -- (ejecucion)
-			node[etiqueta, midway, xshift=4.25cm] {prueba de Merkle SSZ};
+			node[etiqueta, midway, xshift=4.25cm] {prueba de Merkle SSZ (\texttt{body\_root})};
 		\draw[flecha] (ejecucion) -- (recibo)
 			node[etiqueta, midway, xshift=4.25cm] {prueba Merkle-Patricia};
 		\draw[flecha] (recibo) -- (evento)
@@ -436,6 +427,27 @@ emitido por el contrato del puente con los parámetros del depósito.
 	del comité de sincronización de Ethereum.}
 	\label{fig:eth_cadena_confianza}
 \end{figure}
+
+\subsection{Cadena de verificación para el puente}
+\label{sec:eth_cadena_verificacion}
+
+Los elementos descritos en esta sección permiten construir una cadena de compromisos
+criptográficos que vincula un evento emitido por un contrato con la firma del comité de
+sincronización, como se ilustra en la Figura~\ref{fig:eth_cadena_confianza}. El punto de partida
+es un comité conocido, cuya firma agregada certifica la raíz del encabezado atestiguado. Una
+prueba de Merkle SSZ respecto del \texttt{state\_root} de ese encabezado vincula con él el
+encabezado finalizado~\cite{ethlightclient}. Desde este último, una prueba de Merkle SSZ respecto
+de \texttt{body\_root}
+conduce al encabezado de ejecución y, en particular, a su campo \texttt{receiptsRoot}. Una prueba
+de inclusión en el árbol de Merkle-Patricia de recibos demuestra, finalmente, que el recibo de la
+transacción de bloqueo pertenece al bloque, que su ejecución fue exitosa y que contiene el evento
+emitido por el contrato del puente con los parámetros del depósito. El prototipo desarrollado en este
+trabajo implementa una variante de esta cadena, descrita en la Sección~\ref{sec:lock_and_mint},
+que omite la prueba que vincula el encabezado finalizado y parte directamente del encabezado
+atestiguado por el comité, demuestra la
+inclusión de la transacción de bloqueo en el árbol de transacciones y su ejecución exitosa en el
+árbol de recibos, y obtiene el destinatario y el monto de los datos de la llamada en lugar del
+evento.
 
 Cada eslabón de esta cadena es verificable de manera determinista, de modo que la validez del
 evento queda reducida a la validez de la firma del comité. Sin embargo, ejecutar esta

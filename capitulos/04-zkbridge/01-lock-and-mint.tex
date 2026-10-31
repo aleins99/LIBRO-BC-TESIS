@@ -2,9 +2,9 @@ El Capítulo~\ref{chp:conocimiento_cero} presentó los sistemas de prueba y las 
 que el presente trabajo aborda el problema de los puentes descrito en la
 Sección~\ref{sec:puentes}. Este capítulo traslada esos fundamentos a un puente concreto, en el que
 la cadena de destino acuña un activo solo cuando verifica pruebas de que una transacción que invoca
-la función de bloqueo fue incluida en un bloque de la cadena de origen firmado por su comité de
-sincronización. Como se precisa en la Sección~\ref{sec:puente_aceptacion}, estas pruebas no
-acreditan que dicha llamada se haya ejecutado con éxito ni que el bloque haya alcanzado la
+la función de bloqueo fue incluida y se ejecutó con éxito en un bloque de ejecución de la cadena
+de origen cuyo hash está vinculado al encabezado atestiguado por su comité de sincronización. Como se precisa en la
+Sección~\ref{sec:puente_aceptacion}, estas pruebas no acreditan que el bloque haya alcanzado la
 finalidad.
 
 La Sección~\ref{sec:lock_and_mint} describe la arquitectura común del puente, el flujo de una
@@ -19,8 +19,8 @@ y los resultados obtenidos.
 El puente transfiere el token \texttt{GuaraniToken} desde una cadena de origen hacia una cadena de
 destino mediante el esquema \textit{lock-and-mint}. El presente trabajo implementa únicamente el
 flujo de ida, de modo que la operación inversa, de quema y liberación, queda fuera de su alcance.
-La descripción que sigue corresponde a la documentación y al código de la revisión del 12 de
-septiembre de 2026 del repositorio del puente~\cite{zkguaranibridgesp1}.
+La descripción que sigue corresponde a la documentación y al código del repositorio del
+puente~\cite{zkguaranibridgesp1}.
 
 \subsection{Arquitectura y componentes}
 \label{sec:puente_arquitectura}
@@ -51,8 +51,8 @@ La arquitectura se compone de los siguientes elementos.
 	los parámetros de política que la prueba no puede validar por sí sola, que son el dominio de
 	firma, el compromiso del comité de sincronización vigente y la posición del hash del bloque en
 	el encabezado de la cadena de baliza.
-	\item \texttt{ZKReceiver}, en la cadena de destino, que verifica la prueba de inclusión y acuña
-	los tokens. Sus funciones de acuñación son públicas, de modo que cualquier parte que disponga de
+	\item \texttt{ZKReceiver}, en la cadena de destino, que verifica la prueba de inclusión, que
+	abarca la transacción de bloqueo y su recibo, y acuña los tokens. Sus funciones de acuñación son públicas, de modo que cualquier parte que disponga de
 	pruebas válidas puede invocarlas.
 	\item Un contrato verificador, en el que ambos contratos de destino delegan la comprobación
 	criptográfica de las pruebas.
@@ -68,8 +68,8 @@ La arquitectura se compone de los siguientes elementos.
 Las pruebas establecen dos enunciados enlazados por el hash del bloque de ejecución. La prueba de
 consenso establece que el comité de sincronización firmó un encabezado de la cadena de baliza del
 que se deriva ese hash, y la prueba de inclusión, que la transacción que invoca \texttt{lock}
-pertenece al bloque cuyo encabezado produce el mismo hash. Ninguno de los dos establece que esa
-llamada se haya ejecutado con éxito. Los contratos, el token, el \textit{relayer}, la interfaz y
+pertenece al bloque cuyo encabezado produce el mismo hash y que su recibo, comprometido en ese
+mismo encabezado, registra una ejecución exitosa. Los contratos, el token, el \textit{relayer}, la interfaz y
 estos dos enunciados son comunes a las implementaciones en Noir y en SP1. La forma en que cada
 herramienta expresa y demuestra los enunciados, la codificación de sus valores públicos y el
 contrato verificador que corresponde a cada sistema de prueba se describen en las secciones
@@ -133,15 +133,16 @@ de ida, que se desarrolla en cinco etapas.
 	suscripción o por consulta periódica, y obtiene el recibo de la transacción para identificar el
 	bloque que la contiene. Con un nodo de la cadena de baliza obtiene los datos del comité de
 	sincronización que firmó ese bloque, y con un nodo de ejecución reconstruye el encabezado del
-	bloque y obtiene todas sus transacciones. El \textit{relayer} comprueba que el hash del
-	encabezado reconstruido y el de cada transacción coincidan con los que informa el nodo, y
-	detiene el proceso si no coinciden. Los datos del evento solo sirven para iniciar el proceso y
+	bloque y obtiene todas sus transacciones y sus recibos. El \textit{relayer} comprueba que el
+	hash del encabezado reconstruido y el de cada transacción coincidan con los que informa el nodo
+	y que cada recibo corresponda a la transacción de su posición, y detiene el proceso si alguna
+	comprobación falla o si el recibo del bloqueo registra una ejecución revertida. Los datos del evento solo sirven para iniciar el proceso y
 	no se utilizan para acuñar.
 	\item \textbf{Generación de las pruebas.} El \textit{relayer} invoca el programa de consenso con
 	el encabezado de la cadena de baliza, las claves públicas del comité, el vector de
 	participación, la firma agregada y la rama de Merkle que conduce al hash del bloque de
-	ejecución, y el programa de inclusión con el encabezado de
-	ejecución, las transacciones del bloque y la posición de la transacción de bloqueo. Cada
+	ejecución, y el programa de inclusión con el encabezado de ejecución, las transacciones y los
+	recibos del bloque y la posición de la transacción de bloqueo. Cada
 	programa produce una prueba y sus valores públicos.
 	\item \textbf{Envío a destino.} Si el bloque todavía no está anclado, el \textit{relayer} envía
 	ambas pruebas en una única transacción a \lstinline|mintRemoteWithHeader|, junto con los datos
@@ -171,8 +172,9 @@ que el programa solo establece si la firma agregada y la rama de Merkle son corr
 participaron en ella más de dos tercios de los miembros del comité, y el dominio, la posición del
 hash y el compromiso del comité coinciden con los fijados por el propietario. \texttt{ZKReceiver}, por su parte, solo acuña cuando el verificador acepta la
 prueba de inclusión para la clave de su programa, la prueba declara verificada la inclusión, la
-raíz de las transacciones proviene del encabezado y la transacción pudo interpretarse, el hash de
-ese encabezado está anclado, la transacción se dirigió al contrato \texttt{Sender}, los datos de
+raíz de las transacciones proviene del encabezado y la transacción pudo interpretarse, el recibo
+de la misma posición pertenece al árbol de recibos de ese encabezado y registra una ejecución
+exitosa, el hash de ese encabezado está anclado, la transacción se dirigió al contrato \texttt{Sender}, los datos de
 la llamada coinciden en longitud y en hash con los comprometidos por la prueba y corresponden a
 una llamada a \texttt{lock} con una dirección bien formada y un monto positivo, y el par formado
 por el hash del bloque y la posición de la transacción no se procesó antes.
@@ -180,16 +182,21 @@ por el hash del bloque y la posición de la transacción no se procesó antes.
 Estas condiciones respaldan algunas de las afirmaciones que distingue la
 Sección~\ref{sec:circom_limitaciones}, pero no todas. La inclusión de la transacción y la
 vinculación de la raíz con un encabezado concreto quedan establecidas por la prueba de inclusión,
-y el destinatario y el monto se extraen de los datos de la transacción probada, por lo que el
-\textit{relayer} no puede alterarlos. La reutilización de una operación se impide mediante el
+que establece además, mediante el código de estado del recibo, que la llamada de nivel superior
+de la transacción terminó sin revertir~\cite{eip658}. Como la transacción se dirige directamente
+a \texttt{Sender}, cuya función \texttt{lock} revierte si alguna de sus comprobaciones falla, y
+el token, basado en la implementación ERC-20 de OpenZeppelin, revierte ante una autorización o un
+saldo insuficientes en lugar de devolver un valor de error, una ejecución exitosa implica que los
+tokens quedaron en custodia y que se emitió el evento \texttt{Locked}~\cite{zkguaranibridgesp1,
+ozerc20}. El destinatario y el monto
+se extraen de los datos de la transacción probada, por lo que el \textit{relayer} no puede
+alterarlos. La reutilización de una operación se impide mediante el
 registro de los pares ya procesados. La autenticidad del encabezado, en cambio, depende de la
 honestidad de la mayoría del comité de sincronización y de que el propietario de
 \texttt{BeaconLightClient} mantenga actualizado el compromiso del comité, que se renueva cada 256
 épocas~\cite{ethconsensusaltair}. Según la documentación de la revisión examinada, la rotación del
-comité se actualiza mediante una operación del propietario y no mediante una prueba, el contrato
-ancla cualquier bloque con una firma válida aunque no esté finalizado, y la prueba de inclusión no
-establece que la transacción de bloqueo se haya ejecutado con éxito, para lo cual se requeriría
-probar su recibo~\cite{zkguaranibridgesp1}. A ello se suman la corrección del contrato verificador
+comité se actualiza mediante una operación del propietario y no mediante una prueba, y el contrato
+ancla cualquier bloque con una firma válida aunque no esté finalizado~\cite{zkguaranibridgesp1}. A ello se suman la corrección del contrato verificador
 y los supuestos del sistema de prueba que lo sustenta, incluida la configuración confiable cuando
 existe (Sección~\ref{sec:snarks_starks}).
 
@@ -198,13 +205,13 @@ destino no le otorgan un permiso exclusivo, ya que \lstinline|updateHeader|,
 \lstinline|mintRemote| y \lstinline|mintRemoteWithHeader| pueden ser invocadas por cualquier
 parte. Las comprobaciones de \texttt{ZKReceiver} y de los programas probados impiden, por su parte,
 que quien presenta las pruebas determine el bloque, la transacción, el destinatario o el monto al
-margen de lo que estas comprometen, o que reutilice una operación ya procesada. Esas comprobaciones
-no bastan, sin embargo, para afirmar que toda acuñación responde a un bloqueo efectivo de tokens,
-ya que el receptor no verifica el estado de ejecución de la transacción, la emisión del evento
-\texttt{Locked} ni la finalidad del bloque. La detección de ese evento por el \textit{relayer}
-habitual es una condición de su propio funcionamiento y no una exigencia del receptor, de modo que
-las comprobaciones descritas no distinguen una llamada a \texttt{lock} incluida pero revertida, ni
-un bloque firmado que no llegue a finalizarse, de una operación completada en un bloque final.
+margen de lo que estas comprometen, o que reutilice una operación ya procesada. Exigen, además,
+que el bloqueo se haya ejecutado con éxito, de modo que una llamada a \texttt{lock} incluida pero
+revertida no permite acuñar. La detección del evento \texttt{Locked} por el \textit{relayer}
+habitual es una condición de su propio funcionamiento y no una exigencia del receptor, que se
+apoya en el recibo probado y no en el evento. Esas comprobaciones no verifican, sin embargo, la
+finalidad del bloque, de modo que no distinguen un bloque firmado que no llegue a finalizarse de
+uno final.
 Finalmente, el \textit{relayer} sigue siendo relevante para la disponibilidad del servicio, puesto
 que si deja de operar ninguna transferencia se completa hasta que otra parte genere y envíe las
 pruebas. El tratamiento de las limitaciones señaladas en la versión evaluada

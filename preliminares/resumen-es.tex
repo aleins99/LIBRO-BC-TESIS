@@ -25,10 +25,11 @@ más explotados del ecosistema.
 En este trabajo se diseña e implementa un puente de confianza reducida
 (\textit{trust-minimized}) que sustituye esa confianza por verificación criptográfica. El
 contrato de destino solo acuña cuando valida \textit{on-chain} una prueba de conocimiento cero
-(\textit{zero-knowledge}) que demuestra tanto la inclusión real de la transacción de bloqueo en
-un bloque de la cadena de origen a través de una prueba de inclusión en el árbol de transacciones, 
-como la coincidencia del destinatario y el monto de la transferencia con esa transacción, de modo que
-no puedan adulterarse. La lógica de verificación se desarrolló en Noir y, de forma equivalente,
+(\textit{zero-knowledge}). La prueba acredita que la transacción de bloqueo fue incluida en el
+bloque anclado y que el recibo de esa misma posición registra una ejecución exitosa. El receptor
+verifica que la transacción invoca \texttt{lock} en \texttt{Sender} y obtiene de los datos de la
+llamada el destinatario y el monto que se acuñará. Estas comprobaciones no acreditan la finalidad
+del bloque. La lógica de verificación se desarrolló en Noir y, de forma equivalente,
 en Rust para la máquina virtual de conocimiento cero SP1, con verificadores \textit{on-chain} en
 Solidity, y ambas implementaciones se comparan empíricamente en rendimiento, costo de
 verificación y viabilidad práctica. Un \textit{relayer} \textit{off-chain} construye las pruebas
