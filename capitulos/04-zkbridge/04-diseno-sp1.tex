@@ -1,0 +1,179 @@
+\section{Diseño e implementación en SP1}
+\label{sec:sp1_impl}
+
+La implementación en SP1 expresa los dos enunciados presentados en la
+Sección~\ref{sec:puente_arquitectura} mediante dos programas invitados escritos en Rust, cuya
+ejecución se demuestra en la máquina virtual descrita en la Sección~\ref{sec:sp1}, y dos programas
+anfitriones que preparan sus entradas y solicitan las pruebas. La arquitectura, los contratos y el
+flujo de una transferencia son los de la Sección~\ref{sec:lock_and_mint}, por lo que esta sección
+sigue la estructura de la Sección~\ref{sec:noir_impl} y se ocupa de lo que demuestra cada programa,
+de la codificación y la verificación de sus valores públicos y de la generación de las pruebas. La
+descripción corresponde al código del repositorio del puente y de los repositorios de sus dos
+programas~\cite{zkguaranibridgesp1, sp1synccommitteerepo, txinclusionsp1repo}. En ninguno de los
+dos programas las dependencias criptográficas, que son las bibliotecas \texttt{sha2},
+\texttt{sha3} y \texttt{bls12\_381\_plus}, se sustituyen por las versiones modificadas que dirigen
+sus operaciones hacia los precompilados de la máquina virtual
+(Sección~\ref{sec:sp1_flujo}), de modo que el cálculo de SHA-256, de Keccak-256 y de las
+operaciones sobre BLS12-381 se ejecuta como instrucciones RISC-V ordinarias.
+
+\subsection{Programa de consenso}
+\label{sec:sp1_impl_consenso}
+
+El programa invitado de consenso corresponde al paquete \texttt{sync-committee-program}, y su
+anfitrión es el ejecutable \texttt{sync-committee}, que lee un archivo con los datos de la cadena
+de baliza y escribe en la entrada del invitado doce valores. Esos valores son los cinco campos del
+encabezado atestiguado, el dominio de firma, la firma agregada, las claves públicas comprimidas
+de los miembros del comité, el vector de participación, el hash del bloque de ejecución que se
+pretende anclar, la rama SSZ que lo vincula con \texttt{body\_root} y su índice
+generalizado~\cite{sp1synccommitteerepo}. Cuando la cadena de origen dispone de un nodo de baliza,
+el puente obtiene esos datos tomando como encabezado atestiguado el del bloque de baliza cuyo
+\textit{execution payload} contiene el hash del bloque del bloqueo, y tomando la firma y el vector
+de participación del bloque siguiente, ya que el agregado incluido en un \textit{slot} firma la
+raíz del bloque anterior~\cite{zkguaranibridgesp1, ethconsensusaltair}. El anfitrión resuelve el
+dominio, a partir de un valor explícito o de la versión de la bifurcación y de la raíz de los
+validadores del bloque génesis, y verifica de forma nativa la rama y la firma antes de solicitar
+la ejecución, con el fin de rechazar entradas inconsistentes sin esperar a la máquina virtual.
+Estas comprobaciones del anfitrión quedan fuera de la ejecución demostrada
+(Sección~\ref{sec:sp1_programas}), por lo que el invitado repite todas las que sustentan el
+enunciado, con la única excepción de la procedencia del dominio, que se contrasta en el contrato.
+
+El invitado calcula la raíz del encabezado mediante \texttt{hash\_tree\_root} y obtiene la raíz de
+firma como el hash SHA-256 de la concatenación de esa raíz con el dominio~\cite{ethconsensusphase0}.
+Suma después las claves de los miembros cuyo bit de participación vale uno, descomprimiendo
+únicamente las de esos miembros, y verifica la Ecuación~\eqref{eq:bls_agregada} sobre la raíz de
+firma, con la función $H_{\mathbb{G}_2}$ implementada como hash a la curva con la etiqueta de
+separación de dominio que emplea Ethereum~\cite{rfc9380}. A diferencia de un circuito, la
+ejecución solo recorre las claves de los firmantes, de manera que el trabajo de esta etapa depende
+de la participación efectiva. Verifica también, mediante la función \texttt{verify\_merkle\_branch},
+que la rama conduce desde el hash del bloque de ejecución hasta \texttt{body\_root} y que el índice
+generalizado corresponde exactamente a la profundidad de la rama, y comprueba que el número de
+firmantes multiplicado por tres supere el doble del tamaño del comité. Si las claves o el vector de
+participación están mal formados, el invitado no interrumpe su ejecución, sino que registra cero
+firmantes, de modo que la prueba se genera igualmente con un resultado negativo. El invitado
+compromete diez valores públicos, entre ellos el indicador \texttt{valid}, que solo es verdadero si
+la firma, la rama y el umbral se verifican, y \texttt{committeeCommitment}, el hash SHA-256 de las
+claves comprimidas del comité concatenadas en orden~\cite{sp1synccommitteerepo}.
+
+\texttt{BeaconLightClient} verifica la prueba con la clave del programa de consenso, exige que
+\texttt{valid} sea verdadero, compara el dominio, el índice generalizado y el compromiso del comité
+con los valores fijados por su propietario, rechaza un hash de bloque o un \textit{slot} nulos y, si
+todas las comprobaciones se cumplen, registra el \textit{slot} asociado al hash del bloque de
+ejecución~\cite{zkguaranibridgesp1}. El encabezado que firma el comité es el atestiguado. Ni el
+invitado ni el contrato verifican la rama que vincularía un encabezado finalizado con el
+\texttt{state\_root} del atestiguado (Sección~\ref{sec:eth_cadena_verificacion}), de modo que el
+anclaje acredita la firma del comité sobre el bloque, pero no su finalidad.
+
+\subsection{Programa de inclusión y ejecución exitosa}
+\label{sec:sp1_impl_inclusion}
+
+\begin{sloppypar}
+El programa invitado de inclusión corresponde al paquete \texttt{tx-inclusion-verifier-program}, cuya
+función principal lee una estructura de entrada, delega la verificación en la función
+\texttt{process\_input} de la biblioteca \texttt{tx-inclusion-verifier-lib} y compromete el
+resultado~\cite{txinclusionsp1repo}. Su anfitrión, el ejecutable \texttt{tx-inclusion-verifier},
+recibe esa entrada en un archivo que prepara el \textit{relayer}. Este reconstruye el encabezado
+del bloque y comprueba que su hash Keccak-256 coincida con el que informa el nodo, reserializa cada
+transacción y comprueba su hash, obtiene los recibos del bloque, comprueba que cada uno corresponda
+a la transacción de su posición y los serializa en la codificación que almacena el árbol de
+recibos, con el byte de tipo antepuesto en los recibos tipados~\cite{zkguaranibridgesp1, eip2718}.
+\end{sloppypar}
+
+El invitado calcula el hash Keccak-256 del encabezado, que identifica el bloque, y extrae de ese
+mismo encabezado \texttt{transactionsRoot} y \texttt{receiptsRoot} (Tabla~\ref{tab:eth_header}). Con la lista completa de transacciones reconstruye el
+árbol de transacciones, cuyas claves son las codificaciones RLP de las posiciones, comprueba que su
+raíz coincida con la del encabezado y que la transacción declarada ocupe la posición indicada, y
+repite el procedimiento con los recibos y su raíz. El recibo que examina es el de esa misma
+posición, por lo que presentar el recibo exitoso de otra transacción alteraría la raíz reconstruida
+o correspondería a otra posición. La biblioteca admite también la verificación de una rama del
+árbol, pero el puente utiliza la reconstrucción completa. El invitado decodifica después el sobre
+de la transacción, del que obtiene el destinatario, el valor y los datos de la llamada, cuyo hash y
+longitud compromete, y lee el código de estado del recibo, que desde Byzantium indica si la
+ejecución terminó sin revertir~\cite{eip658}. Un recibo anterior a esa actualización, que contiene
+una raíz de estado en lugar del código, se considera no válido~\cite{txinclusionsp1repo}.
+
+El estado exitoso no se exige mediante una aserción del invitado. La función
+\texttt{process\_input} no interrumpe la ejecución ante un error, sino que lo refleja en los
+indicadores \texttt{receiptVerified} y \texttt{txSucceeded}, y este último solo es verdadero si el
+recibo se verificó y su código indica éxito. Una prueba de un bloqueo revertido es, por lo tanto,
+una prueba válida, y es \texttt{ZKReceiver} quien la rechaza con el error
+\texttt{TransactionFailed}~\cite{zkguaranibridgesp1}. El \textit{relayer}, por su parte, descarta un
+bloqueo revertido antes de generar las pruebas y vuelve a comprobar ambos indicadores antes de
+enviarlas, pero esa conducta solo evita trabajo innecesario. La condición que impide acuñar es la
+del receptor, que se aplica a cualquier parte que presente la prueba. Los datos de la llamada se
+vinculan con el destinatario y el monto del mismo modo descrito en la
+Sección~\ref{sec:puente_aceptacion}, ya que el receptor recibe esos datos, comprueba su longitud y
+su hash frente a los comprometidos y decodifica de ellos la llamada a \texttt{lock}. El evento
+\texttt{Locked} sirve al \textit{relayer} para detectar la operación, mientras que el receptor se
+apoya en el recibo probado.
+
+\subsection{Valores públicos y verificación en Solidity}
+\label{sec:sp1_impl_publicas}
+
+Los valores públicos de cada programa son una secuencia de bytes con la codificación del ABI de
+Ethereum. El invitado de consenso construye una estructura declarada con la biblioteca
+\texttt{alloy-sol-types}, cuyo cuarto campo es \texttt{executionBlockHash}, la codifica y la
+compromete mediante \lstinline|commit_slice| (Sección~\ref{sec:sp1_programas}). Como todos los
+campos son de tamaño fijo, la codificación ocupa exactamente diez palabras de 32 bytes y coincide
+byte a byte con la que decodifica \lstinline|abi.decode| en Solidity, de modo que el hash del bloque
+ocupa la cuarta palabra. El anfitrión escribe esos bytes junto con la prueba en un archivo, y el
+\textit{relayer} los entrega como argumento de \lstinline|mintRemoteWithHeader|.
+\texttt{ZKReceiver} los reenvía a \lstinline|updateHeader|, donde \texttt{BeaconLightClient}
+verifica la prueba, decodifica la estructura y registra el anclaje con ese hash como clave. Los
+valores del programa de inclusión ocupan quince palabras y llevan el hash del bloque en la quinta.
+\texttt{ZKReceiver} los decodifica y consulta \lstinline|isAnchored| con ese valor, de modo que el
+vínculo entre ambas pruebas es la igualdad de esos 32 bytes, comprobada a través del registro de
+anclajes~\cite{zkguaranibridgesp1, sp1synccommitteerepo, txinclusionsp1repo}.
+
+Ambos contratos delegan la verificación en la función \lstinline|verifyProof| del contrato
+verificador, que recibe la clave del programa, los valores públicos y la prueba, y revierte si la
+prueba no es válida para esa combinación~\cite{sp1contracts}. Las claves de los dos programas se
+fijan como valores inmutables al desplegar los contratos, por lo que una prueba válida de otro
+programa con valores de la misma forma se rechaza. El verificador incorpora los valores públicos a
+través de su hash SHA-256 (Sección~\ref{sec:sp1_flujo}), de manera que alterar un solo byte de la
+secuencia invalida la prueba. Los campos y el uso que hacen de ellos los contratos coinciden con
+los de la Tabla~\ref{tab:valores_publicos}, y no se encontraron diferencias. Conviene precisar dos
+aspectos de esta implementación. El indicador \texttt{txSucceeded} implica \texttt{receiptVerified},
+porque el programa solo lo activa sobre un recibo verificado, y \texttt{ZKReceiver} comprueba
+ambos, de modo que un recibo no verificado se rechaza con \texttt{ReceiptNotVerified} antes de
+examinar el éxito. Las raíces \texttt{transactionsRoot} y \texttt{receiptsRoot} se contrastan dentro
+del programa con las reconstruidas, y ningún contrato las compara por separado.
+
+\subsection{Generación de pruebas e integración}
+\label{sec:sp1_impl_integracion}
+
+La preparación se realiza una vez por programa. La compilación de cada anfitrión compila también el
+invitado para la arquitectura RISC-V de la máquina virtual, y la clave de verificación se deriva de
+forma determinista del ejecutable resultante (Sección~\ref{sec:sp1_programas}). El script de
+despliegue de la cadena de destino lee esas claves de los ejecutables y las fija en
+\texttt{BeaconLightClient} y \texttt{ZKReceiver}, junto con la dirección del contrato verificador
+de SP1 de la red y los parámetros de política. Los scripts del puente recompilan los programas
+cuando sus fuentes son más recientes que los ejecutables, y cualquier modificación de un invitado,
+como la incorporación de la verificación del recibo, produce una clave distinta y exige desplegar
+de nuevo los contratos que la fijan~\cite{zkguaranibridgesp1}.
+
+Durante cada transferencia, el \textit{relayer} prepara las dos entradas y ejecuta ambos
+anfitriones en el modo destinado a Ethereum, que genera la prueba de la ejecución y la envuelve en
+una prueba Groth16 sobre la curva BN254 (Sección~\ref{sec:sp1_flujo}). Los anfitriones habilitan
+la característica \texttt{native-gnark} del kit, que permite realizar la envoltura sin un
+contenedor, y verifican localmente cada prueba antes de escribirla. El \textit{relayer} genera
+siempre ambas pruebas y consulta el anclaje del bloque solo después de obtenerlas. Si el bloque no
+está anclado, envía las dos a \lstinline|mintRemoteWithHeader|, que ancla el bloque y acuña en una
+sola transacción, mientras que, si ya lo está, envía solo la prueba de inclusión a
+\lstinline|mintRemote|, y la de consenso, aunque se generó, queda sin utilizar. En ambos casos acompaña los datos de la llamada a \texttt{lock}. Los anfitriones
+ofrecen, además, un modo que ejecuta el invitado sin generar ninguna prueba y otro que genera la
+prueba comprimida, que no está destinada a la verificación en Ethereum.
+
+Estos modos, junto con las transacciones de la cadena de destino, permiten distinguir la ejecución
+sin prueba, que informa el número de ciclos, la generación de la prueba comprimida, el tiempo
+adicional de la envoltura Groth16, que se estima por diferencia entre los tiempos de los modos
+destinado a Ethereum y comprimido, $T_{\mathrm{Ethereum}} - T_{\mathrm{comprimido}}$, la
+verificación local y la verificación en la cadena de destino. Los anfitriones no cronometran
+internamente sus etapas, y en los dos modos que generan pruebas ejecutan en secuencia la
+preparación de las claves, la generación de la prueba, su verificación local y la escritura de los
+archivos de salida~\cite{sp1synccommitteerepo, txinclusionsp1repo}. Si se cronometra cada modo
+completo, la diferencia es, por lo tanto, una estimación, que incluye además la diferencia entre el
+costo de verificar localmente una prueba Groth16 y el de verificar una prueba comprimida. Del mismo
+modo, el tiempo total del \textit{relayer} incluye todo el trabajo que efectivamente realiza, aun
+cuando una de las pruebas no se envíe, mientras que los tiempos de generación de las pruebas de
+consenso y de inclusión se comparan por separado. La sección siguiente define cómo se miden estas
+etapas y su correspondencia con las de la implementación en Noir.

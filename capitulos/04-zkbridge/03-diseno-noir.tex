@@ -252,10 +252,10 @@ los organiza según la interfaz de cada programa, lo que incluye completar los a
 tamaños máximos e indicar las longitudes efectivas, ejecuta los programas con \texttt{noir\_js}
 para obtener los testigos y genera las pruebas con \texttt{bb.js} y el destino \lstinline|evm|
 (Sección~\ref{sec:noir_flujo}). Cada generación produce la prueba y el arreglo de entradas
-públicas que espera el contrato verificador correspondiente. Si el bloque no está anclado, el
-\textit{relayer} genera ambas pruebas y las envía a \lstinline|mintRemoteWithHeader|, mientras
-que, si ya lo está, genera solo la de inclusión y la envía a \lstinline|mintRemote|, en ambos casos
-junto con los datos de la llamada a \texttt{lock}. Una ejecución que no satisface las aserciones de
+públicas que espera el contrato verificador correspondiente. El \textit{relayer}, común a ambas
+implementaciones, genera las dos pruebas y consulta después si el bloque ya está anclado. Si no lo
+está, las envía a \lstinline|mintRemoteWithHeader|, y si ya lo está, envía solo la de inclusión a
+\lstinline|mintRemote|, en ambos casos junto con los datos de la llamada a \texttt{lock}. Una ejecución que no satisface las aserciones de
 un programa no produce testigo, de modo que esos fallos se detectan antes de generar la prueba.
 
 Las etapas de preparación, de puesta en marcha y de cada operación distinguidas en la
