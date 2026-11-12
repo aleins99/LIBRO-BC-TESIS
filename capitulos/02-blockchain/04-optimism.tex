@@ -148,16 +148,18 @@ transacción una vez comprimida y de los precios vigentes de \textit{blobs} y de
 que la capa 2 conoce a través del contrato predesplegado \texttt{L1Block}. En consecuencia, el
 costo total de verificar una prueba en Optimism no depende solo del gas de ejecución, sino
 también del tamaño de la prueba y de las entradas públicas que se transmiten en la transacción.
-Por esta razón, en este trabajo el costo de verificación en la cadena de destino se reporta en
-dos magnitudes separadas. La primera es el gas de ejecución consumido por las operaciones de
-verificación, que depende únicamente de las instrucciones ejecutadas por los contratos y no del
-precio del gas. La segunda es el costo monetario de cada transacción, que resulta del producto
-entre el gas consumido y el precio efectivo del gas, al que se suma la tarifa de datos de capa 1.
-Esta última incide de manera significativa en el puente, puesto que las pruebas se transmiten
-como datos de la transacción y su tamaño se refleja en lo que Optimism cobra por publicarlas en
-Ethereum. El costo monetario se expresa en ether y en dólares, con indicación de la fecha del
-precio empleado, y se complementa con el costo de generar las pruebas fuera de la cadena, según
-se detalla en el Capítulo~\ref{chp:zkbridge}.
+Por esta razón, el costo de verificación en la cadena de destino comprende dos magnitudes
+separadas. La primera es el gas de ejecución consumido por las operaciones de verificación, que
+depende únicamente de las instrucciones ejecutadas por los contratos y no del precio del gas. La
+segunda es el costo monetario de cada transacción, que resulta del producto entre el gas consumido
+y el precio efectivo del gas, al que se suma la tarifa de datos de capa 1 y, desde la actualización
+Isthmus, una tarifa del operador~\cite{opfees}. La tarifa de datos incide de manera significativa
+en el puente, puesto que las pruebas se transmiten como datos de la transacción y su tamaño se
+refleja en lo que Optimism cobra por publicarlas en Ethereum. En este trabajo se reporta el gas de
+ejecución de la verificación y el tamaño de las pruebas y de sus entradas públicas, que determinan
+la tarifa de datos, mientras que el costo monetario, que exige enviar las transacciones a la red,
+no se midió. Ambas magnitudes se complementan con el costo de generar las pruebas fuera de la
+cadena, según se detalla en el Capítulo~\ref{chp:zkbridge}.
 
 \subsection{Pruebas de fraude}
 \label{sec:op_fraude}

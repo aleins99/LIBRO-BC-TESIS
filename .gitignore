@@ -31,3 +31,6 @@ _minted*/
 .idea/
 .DS_Store
 *.swp
+
+# Datos de mediciones (no se versionan)
+resultados/

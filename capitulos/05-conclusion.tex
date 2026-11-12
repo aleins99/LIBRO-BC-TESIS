@@ -1,1 +1,146 @@
+\section{Conclusiones}
+\label{sec:conclusiones}
 
+El presente trabajo diseñó e implementó un puente \textit{lock-and-mint} entre Ethereum Sepolia y
+Optimism Sepolia en el que la cadena de destino acuña un activo solo tras verificar pruebas de
+conocimiento cero sobre el bloqueo realizado en la cadena de origen, y comparó dos herramientas
+para generar esas pruebas, Noir y SP1. Las conclusiones se organizan según los objetivos
+específicos planteados en el Capítulo~\ref{chp:introduccion}.
+
+En relación con el primer objetivo, el estudio de los mecanismos de prueba mostró que la
+diferencia entre ambas herramientas no reside en el lenguaje, sino en el objeto que se demuestra.
+Noir compila cada programa en un circuito específico, que Barretenberg demuestra con el sistema
+UltraHonk sobre una cadena de referencia universal, de modo que cada circuito tiene su propia clave
+de verificación y su propio contrato verificador
+(Secciones~\ref{sec:noir_flujo} y~\ref{sec:noir_impl_publicas}). El costo de una prueba queda
+determinado por el número de restricciones del circuito, que incluye ambas ramas de cada
+condicional y las restricciones correspondientes a los tamaños máximos de los datos. SP1, en
+cambio, demuestra la ejecución de un programa sobre una máquina virtual RISC-V, cuyo costo depende
+de los ciclos efectivamente ejecutados, y comprime la prueba resultante mediante recursión hasta
+envolverla en una prueba Groth16 que verifica un contrato común a todos los programas
+(Sección~\ref{sec:sp1_flujo}). Esta diferencia de arquitectura anticipa el resultado principal de
+las mediciones, según el cual Noir concentra su costo en la preparación del circuito y SP1 en cada
+prueba.
+
+En relación con el segundo objetivo, ambas herramientas permitieron expresar los dos enunciados
+que sustentan el puente (Secciones~\ref{sec:noir_impl} y~\ref{sec:sp1_impl}). El programa de
+consenso deriva la raíz de firma del encabezado atestiguado, verifica la firma agregada de los
+miembros participantes del comité de sincronización, exige la participación de más de dos tercios
+del comité y vincula el hash del bloque de ejecución con el encabezado mediante una rama SSZ. El
+programa de inclusión reconstruye los árboles de transacciones y de recibos del bloque identificado
+por ese hash, comprueba que la transacción de bloqueo y su recibo ocupan la misma posición y exige
+que el recibo registre una ejecución exitosa. Los contratos de destino solo acuñan cuando ambas
+pruebas se aceptan y sus valores públicos satisfacen las condiciones de la
+Sección~\ref{sec:puente_aceptacion}, de manera que el \textit{relayer} deja de ser un acuñador de
+confianza y pasa a ser un probador sin permisos especiales. La implementación conserva, sin
+embargo, dos supuestos de confianza. El puente no verifica la finalidad del bloque anclado, y la
+rotación del comité depende del propietario de \texttt{BeaconLightClient}, que actualiza el
+compromiso sin una prueba de la transición.
+
+En relación con el tercer objetivo, las mediciones caracterizaron el costo de ambas herramientas
+en la generación y en la verificación de las pruebas. En la generación de la prueba de consenso,
+Noir requirió 89,3 minutos de costo fijo, dominado por una compilación que alcanzó 86,7 GiB de
+memoria, y 3,0 minutos por prueba con un máximo de 19,0 GiB, mientras que SP1 requirió un costo
+fijo de segundos, medido con el ejecutable ya compilado, y 17,2 minutos por prueba con unos 86 GiB de memoria en cada una
+(Secciones~\ref{sec:resultados_etapas} y~\ref{sec:resultados_amortizacion}). SP1 resulta, por lo
+tanto, unas cinco veces más rápido para obtener la primera prueba, mientras que Noir resulta 5,7
+veces más rápido por prueba en operación, y su tiempo total acumulado es menor a partir de la
+séptima prueba generada con un mismo programa. Estas cifras de Noir corresponden, sin embargo, a una
+versión anterior de su circuito de consenso, que demuestra un enunciado menor que el de SP1, aunque
+los dos circuitos que demuestran el enunciado completo se probaron en unos 98 segundos en un equipo
+de 18 GB de memoria. En la verificación, en cambio, con las reglas vigentes en la cadena de
+destino, la prueba Groth16 de SP1 requiere unas 259\,000 unidades de gas, frente a entre 4,49 y
+4,75 millones de cada prueba UltraHonk de Noir, cuyo anclaje, con dos pruebas, consume unos
+9,08 millones y cuya acuñación, unos 4,87 millones. Los datos de SP1 ocupan, además, entre 14 y
+20 veces menos (Sección~\ref{sec:resultados_gas}). El
+costo de verificación de Noir depende sobre todo del número de entradas públicas, mientras que el
+de SP1 es prácticamente independiente del programa. En cuanto a la complejidad del desarrollo, SP1
+permitió escribir los programas en Rust con datos de tamaño variable, ejecutarlos sin generar la
+prueba y obtener su número de ciclos en segundos, mientras que en Noir cada modificación del
+circuito de consenso exige repetir una compilación de casi una hora y media y fijar de antemano los
+tamaños máximos de los datos del programa de inclusión.
+
+En conjunto, los resultados muestran que ninguna de las dos herramientas domina a la otra en
+todas las dimensiones evaluadas. Noir ofrece el menor costo de generación por prueba y el menor
+requisito de memoria del probador una vez compilado el circuito, mientras que SP1 ofrece el menor
+costo de verificación en la cadena de destino, el menor tamaño de las pruebas y la mayor
+flexibilidad de desarrollo. La elección entre ambas depende, en consecuencia, de si el costo
+determinante para la operación del puente es el del equipo que genera las pruebas o el del gas que
+se paga en cada transacción. Estas conclusiones están sujetas a las condiciones de validez de la
+Sección~\ref{sec:metodologia_validez} y a las mediciones que no pudieron realizarse, entre ellas el
+tiempo de la envoltura Groth16 de SP1, las etapas de generación del programa de inclusión, la
+generación en el servidor de los circuitos de consenso que integran el puente en Noir, el gas de
+una transacción completa de anclaje o de acuñación en SP1 y el costo monetario en Optimism
+Sepolia.
+
+\section{Verificación de la hipótesis}
+\label{sec:verificacion_hipotesis}
+
+La pregunta de investigación planteaba si el paradigma de máquina virtual de conocimiento cero de
+propósito general, representado por SP1, presenta ventajas significativas en términos de
+flexibilidad de desarrollo y de tiempos de ejecución frente a un lenguaje de dominio específico
+como Noir, al implementar la verificación de consenso e inclusión de transacciones en Ethereum.
+Los resultados permiten responderla de forma diferenciada para cada una de sus dos dimensiones.
+
+En la flexibilidad de desarrollo, la hipótesis se confirma. SP1 admite datos de tamaño variable,
+como el número de miembros del comité o la longitud de las transacciones, sin fijar máximos que
+condicionen el circuito, recorre solo las claves de los firmantes efectivos y permite ejecutar el
+programa sin generar la prueba para depurarlo y estimar su costo. La derivación de su clave de
+verificación demandó segundos, frente a la compilación de casi una hora y media y a la obtención de
+la clave que exige cada modificación del circuito de consenso en Noir. Esta comparación es
+cualitativa en lo que respecta a la compilación de SP1, cuya duración no se midió desde cero.
+
+En los tiempos de ejecución, la hipótesis se confirma solo para la primera prueba y se refuta para
+la operación del puente. SP1 obtuvo la primera prueba unas cinco veces más rápido que Noir, pero
+cada prueba posterior demandó 5,7 veces más tiempo y unas cuatro veces más memoria, de modo que
+Noir resulta más rápido a partir de la séptima prueba. Como el programa de consenso se mantiene
+fijo durante la rotación del comité, la operación del puente supera ese punto con los primeros
+anclajes. Esta conclusión corresponde al caso medido, en el que SP1 se ejecutó solo en el
+procesador y sin precompilados, condiciones que lo desfavorecen, y en el que tampoco se midió la
+envoltura Groth16, que aumentaría su costo por prueba. El circuito de Noir medido demuestra, en
+cambio, un enunciado menor que el de SP1, condición que favorece a Noir, aunque la generación de
+los circuitos completos en otro equipo sugiere que esa diferencia no altera el sentido del
+resultado.
+
+La hipótesis se confirma, en consecuencia, de forma parcial. SP1 presenta ventajas significativas
+en la flexibilidad de desarrollo y en el tiempo necesario para obtener la primera prueba, pero no
+en el tiempo de generación de las pruebas durante la operación del puente, en el que la ventaja
+corresponde a Noir. Aunque la pregunta no lo contempla, el costo de verificación en la cadena de
+destino constituye una ventaja adicional de SP1, cuya verificación requiere entre 17 y 18 veces
+menos gas que cada verificación de Noir con las reglas vigentes en la cadena de destino.
+
+\section{Trabajos futuros}
+\label{sec:trabajos_futuros}
+
+Los resultados y las limitaciones señaladas permiten identificar varias líneas de continuación.
+La primera consiste en completar las mediciones. Para SP1, corresponde medir la envoltura Groth16,
+la compilación desde cero del programa invitado y el efecto de los precompilados de SHA-256 y de
+BLS12-381, de la aceleración por GPU y de la red de probadores~\cite{succinctnetwork} sobre el
+costo por prueba y sobre el punto de equilibrio. Para ambas herramientas, corresponde medir las
+etapas de generación del programa de inclusión y repetir cada medición para estimar su
+variabilidad. En Noir, corresponde medir en el servidor los circuitos de consenso que integran el
+puente, y en SP1, el gas de las transacciones completas de anclaje y de acuñación con pruebas reales
+de sus programas, incluida la verificación de la prueba de inclusión. El envío de las transacciones
+de ambas herramientas a Optimism Sepolia permitiría, además, establecer su costo monetario,
+con la tarifa de datos de la capa 1 y la tarifa del operador.
+
+La segunda línea consiste en reducir los supuestos de confianza que conserva el puente. La
+verificación de la finalidad, mediante la rama que vincula el encabezado finalizado con el
+encabezado atestiguado (Sección~\ref{sec:eth_cadena_verificacion}), impediría anclar bloques que no
+lleguen a finalizarse. La verificación de la transición del comité mediante una prueba, en lugar
+de su actualización por el propietario, eliminaría la dependencia de ese actor, como ocurre en los
+clientes ligeros basados en pruebas descritos en la Sección~\ref{sec:puentes_estado_arte}.
+
+La tercera línea consiste en reducir el costo de verificación. En el circuito de inclusión de Noir,
+la representación de los valores de 32 bytes en dos mitades de 128 bits, en lugar de un elemento
+por byte, como ya ocurre con las raíces en el circuito del comité, reduciría el número de
+entradas públicas, un factor que incide de forma considerable en su gas
+(Sección~\ref{sec:resultados_gas}). En ambas herramientas, la agregación de las pruebas de consenso
+y de inclusión en una sola mediante recursión permitiría verificar una única prueba por
+acuñación. La disponibilidad en Optimism de los precompilados de BLS12-381 de la propuesta
+EIP-2537~\cite{eip2537} abre, por su parte, la posibilidad de comparar la verificación mediante
+pruebas con la verificación directa de la firma agregada en el contrato.
+
+Por último, el puente puede extenderse con el flujo de retorno, de quema y liberación, que quedó
+fuera del alcance del trabajo, con su despliegue en redes principales y con la incorporación de
+otras cadenas de origen o de destino.

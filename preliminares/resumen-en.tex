@@ -1,10 +1,11 @@
-\centerline{\textbf{\large Title }}
+\centerline{\textbf{\large Verification of Ethereum Consensus and Transaction Inclusion}}
+\centerline{\textbf{\large with Zero Knowledge Applied to the Transfer of Digital Assets}}
 
 \vspace{2cm}
 
-\rightline{Author: full name}
+\rightline{Authors: Javier López - Alejandro Marín}
 \vspace{0.5cm}
-\rightline{Advisor: full name}
+\rightline{Advisor: PhD Marcos Villagra}
 
 \vspace{0.5cm}
 
@@ -14,9 +15,33 @@
 \vspace{0.5cm}
 
 \noindent
-This is the abstract
+Cross-chain bridges allow assets to be transferred between different blockchains and are a
+central element of interoperability. Most of them rely on the lock-and-mint pattern operated by a
+trusted relayer, an actor that, after observing a lock of funds on the source chain, mints the
+equivalent amount on the destination chain. Since all security rests on that operator, which could
+mint fraudulently, bridges have become one of the most exploited targets of the ecosystem. This
+work designs and implements a trust-minimized bridge that replaces that trust with cryptographic
+verification. The destination contract mints only when it validates a zero-knowledge proof
+on-chain. The proof attests that the lock transaction was included in the anchored block and that
+the receipt at that same position records a successful execution. The receiver verifies that the
+transaction invokes \texttt{lock} on \texttt{Sender} and obtains the recipient and the amount to
+be minted from the call data. These checks do not attest to the finality of the block. The
+verification logic was developed in Noir and, equivalently, in Rust for the SP1 zero-knowledge
+virtual machine, with on-chain verifiers in Solidity, and both implementations are compared
+empirically in terms of performance, verification cost and practical viability. An off-chain
+relayer builds the consensus and inclusion proofs for each operation and submits them to the
+destination contract, where it ceases to be a trusted minter and becomes a permissionless prover,
+since anyone with valid proofs can release the funds and no one can mint without them.
+Complementarily, the validation of the signature of the Ethereum sync committee is designed as the
+root of trust over the finality of the block. The solution was validated on real test networks,
+with Ethereum Sepolia as the source chain and Optimism Sepolia as the destination chain. It
+additionally includes a web interface and a comparative mode that experimentally shows how the
+classic scheme admits fraudulent minting, whereas the scheme with zero-knowledge verification
+rejects it.
 
 \vspace{0.5cm}
 
 \noindent
-\textbf{Keywords}: 
+\textbf{Keywords}: cross-chain bridges; zero-knowledge proofs (zk-SNARKs); Noir; UltraHonk; SP1;
+on-chain verification; blockchain interoperability; inclusion proof (Merkle-Patricia trie); trust
+minimization; Ethereum.

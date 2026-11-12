@@ -403,7 +403,7 @@ desarrollado en este trabajo.
 		\node[caja] (comite) {Comité de sincronización $\mathcal{C}$ (512 claves BLS)};
 		\node[caja, below=of comite] (atestiguado) {Encabezado de consenso atestiguado\\
 			(\texttt{slot}, \texttt{parent\_root}, \texttt{state\_root}, \texttt{body\_root})};
-		\node[caja, below=of atestiguado] (consenso) {Encabezado de consenso finalizado\\
+		\node[caja, dashed, below=of atestiguado] (consenso) {Encabezado de consenso finalizado\\
 			(\texttt{slot}, \texttt{parent\_root}, \texttt{state\_root}, \texttt{body\_root})};
 		\node[caja, below=of consenso] (ejecucion) {Encabezado de ejecución\\
 			(\texttt{stateRoot}, \texttt{transactionsRoot}, \texttt{receiptsRoot})};
@@ -414,7 +414,7 @@ desarrollado en este trabajo.
 
 		\draw[flecha] (comite) -- (atestiguado)
 			node[etiqueta, midway, xshift=4.25cm] {firma BLS agregada};
-		\draw[flecha] (atestiguado) -- (consenso)
+		\draw[flecha, dashed] (atestiguado) -- (consenso)
 			node[etiqueta, midway, xshift=4.25cm] {prueba de Merkle SSZ (\texttt{state\_root})};
 		\draw[flecha] (consenso) -- (ejecucion)
 			node[etiqueta, midway, xshift=4.25cm] {prueba de Merkle SSZ (\texttt{body\_root})};
@@ -423,8 +423,10 @@ desarrollado en este trabajo.
 		\draw[flecha] (recibo) -- (evento)
 			node[etiqueta, midway, xshift=4.25cm] {decodificación RLP};
 	\end{tikzpicture}
-	\caption{Cadena de compromisos criptográficos que vincula un evento de bloqueo con la firma
-	del comité de sincronización de Ethereum.}
+	\caption[Cadena de compromisos criptográficos que vincula un evento de bloqueo con la firma
+	del comité de sincronización de Ethereum.]{Cadena de compromisos criptográficos que vincula un evento de bloqueo con la firma
+	del comité de sincronización de Ethereum. El eslabón en trazo discontinuo corresponde a la
+	verificación de finalidad, que el prototipo desarrollado en este trabajo no realiza.}
 	\label{fig:eth_cadena_confianza}
 \end{figure}
 
@@ -442,12 +444,15 @@ conduce al encabezado de ejecución y, en particular, a su campo \texttt{receipt
 de inclusión en el árbol de Merkle-Patricia de recibos demuestra, finalmente, que el recibo de la
 transacción de bloqueo pertenece al bloque, que su ejecución fue exitosa y que contiene el evento
 emitido por el contrato del puente con los parámetros del depósito. El prototipo desarrollado en este
-trabajo implementa una variante de esta cadena, descrita en la Sección~\ref{sec:lock_and_mint},
-que omite la prueba que vincula el encabezado finalizado y parte directamente del encabezado
-atestiguado por el comité, demuestra la
-inclusión de la transacción de bloqueo en el árbol de transacciones y su ejecución exitosa en el
-árbol de recibos, y obtiene el destinatario y el monto de los datos de la llamada en lugar del
-evento.
+trabajo implementa una variante de esta cadena, descrita en la Sección~\ref{sec:lock_and_mint}.
+Dicha variante omite la prueba que vincula el encabezado finalizado, representada con trazo
+discontinuo en la figura, y parte directamente del encabezado firmado por el comité, de modo que
+el bloque anclado no se exige finalizado. A partir de ese encabezado, el prototipo demuestra la
+inclusión de la transacción de bloqueo en el árbol de transacciones y la pertenencia de su recibo
+al árbol de recibos, exige que el código de estado del recibo indique una ejecución exitosa y
+comprueba que el evento de bloqueo fue emitido por el contrato emisor del puente y no por otro
+contrato. El identificador del depósito, el destinatario y el monto quedan así vinculados a la
+prueba, y cada identificador solo puede acuñarse una vez.
 
 Cada eslabón de esta cadena es verificable de manera determinista, de modo que la validez del
 evento queda reducida a la validez de la firma del comité. Sin embargo, ejecutar esta

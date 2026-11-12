@@ -1,2 +1,284 @@
 \section{Puentes}
 \label{sec:puentes}
+
+Las cadenas de bloques descritas en las secciones anteriores mantienen cada una su propio estado
+y su propio mecanismo de consenso, y ninguna de ellas puede, por sí sola, conocer lo que ocurre en
+otra. Un contrato desplegado en Optimism no tiene acceso al estado de Ethereum más allá de los
+mecanismos nativos que el propio OP Stack define (Sección~\ref{sec:op_puente_nativo}), y entre
+cadenas independientes no existe vínculo alguno. Los \textbf{puentes} (\textit{bridges}) son los
+sistemas que permiten trasladar activos e información entre cadenas en ausencia de ese vínculo.
+Esta sección presenta los modelos con que se construyen, los incidentes de seguridad que han
+sufrido y las propuestas que sustituyen la confianza en intermediarios por pruebas de
+conocimiento cero.
+
+\subsection{Interoperabilidad y modelos de puente}
+\label{sec:puentes_modelos}
+
+Se entiende por \textbf{interoperabilidad} entre cadenas de bloques la capacidad de un sistema de
+transferir activos o datos de una cadena a otra de manera que la cadena receptora pueda actuar
+sobre ellos con garantías comparables a las que ofrece la cadena de origen~\cite{belchior2021survey}.
+Un puente materializa esta capacidad mediante tres componentes genéricos. En la cadena de origen,
+un contrato recibe la operación del usuario y la registra. En la cadena de destino, otro contrato
+ejecuta la operación correspondiente una vez que se convence de que la primera ocurrió. Entre
+ambas, uno o varios agentes fuera de la cadena observan la cadena de origen y transmiten a la de
+destino la información necesaria, puesto que ninguna cadena puede iniciar por sí misma una
+comunicación con otra~\cite{zhang2023bridgesok}.
+
+\paragraph{Modelos de transferencia de activos.} Un activo nativo de una cadena no puede
+trasladarse literalmente a otra, ya que su existencia se reduce a un saldo registrado en el estado
+de la primera. Lo que un puente transfiere es, en rigor, un derecho, y la forma de representarlo
+en la cadena de destino da lugar a tres modelos, resumidos en la
+Tabla~\ref{tab:puentes_transferencia}. En el modelo de \textit{bloqueo y acuñación}
+(\textit{lock-and-mint}), el usuario deposita los tokens en un contrato de custodia de la cadena
+de origen y el contrato de destino acuña una cantidad equivalente de un token representativo,
+denominado habitualmente \textit{token envuelto} (\textit{wrapped token}). El retorno sigue el
+camino inverso, de modo que el token representativo se quema en destino y los tokens originales
+se liberan de la custodia. En el modelo de \textit{quema y acuñación} (\textit{burn-and-mint}),
+aplicable cuando un mismo emisor controla el token en ambas cadenas, los tokens se destruyen en
+origen y se emiten en destino, sin que exista una reserva bloqueada. El protocolo CCTP de Circle,
+que traslada la moneda estable USDC entre cadenas a partir de una atestación emitida por el propio
+emisor, constituye un ejemplo de este esquema~\cite{circlecctp}. Por último, en el modelo de
+\textit{bloqueo y liberación} (\textit{lock-and-unlock}), el puente mantiene reservas de liquidez
+del activo nativo en ambas cadenas, y la transferencia consiste en recibir el depósito en una de
+ellas y entregar fondos de la reserva en la otra.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Modelos de transferencia de activos entre cadenas.}
+	\label{tab:puentes_transferencia}
+	\small
+	\begin{tabular}{>{\raggedright\arraybackslash}p{2.7cm} >{\raggedright\arraybackslash}p{4.2cm} >{\raggedright\arraybackslash}p{3.3cm} >{\raggedright\arraybackslash}p{3.6cm}}
+		\toprule
+		\textbf{Modelo} & \textbf{Operación en origen y en destino} & \textbf{Activo recibido} &
+		\textbf{Requisito principal} \\
+		\midrule
+		Bloqueo y acuñación & Custodia en origen y acuñación en destino & Token representativo &
+		La custodia debe respaldar en todo momento lo acuñado \\
+		\addlinespace
+		Quema y acuñación & Destrucción en origen y emisión en destino & Token nativo del mismo
+		emisor & El emisor debe controlar el token en ambas cadenas \\
+		\addlinespace
+		Bloqueo y liberación & Depósito en origen y entrega desde una reserva en destino & Token
+		nativo de la cadena de destino & Reservas de liquidez suficientes en ambas cadenas \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+Los tres modelos comparten una misma pregunta, que constituye el núcleo del problema de seguridad
+de cualquier puente. El contrato de destino debe decidir si la operación declarada en la cadena
+de origen ocurrió realmente, y una decisión errónea en este punto permite crear tokens sin
+respaldo o retirar fondos de una reserva sin haber depositado nada. En el modelo de bloqueo y
+acuñación, que es el adoptado en este trabajo, cada token acuñado sin el bloqueo correspondiente
+deja la custodia insuficiente para respaldar a todos los tenedores del token representativo. La
+Figura~\ref{fig:puente_confianza} ilustra este modelo en su forma más difundida, en la que un
+\textit{relayer} de confianza informa los bloqueos y el contrato de destino acuña sin verificar
+nada más que la identidad de quien lo invoca.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{tikzpicture}[
+		node distance=0.6cm and 1.4cm,
+		caja/.style={draw, rounded corners=2pt, align=center, minimum width=3.6cm,
+			minimum height=1cm, font=\small},
+		cadena/.style={draw, dashed, rounded corners=4pt, inner sep=0.3cm},
+		flecha/.style={-{Stealth[length=2.2mm]}, thick},
+		dato/.style={font=\footnotesize, align=center}
+		]
+		\node[caja] (usuario) {Usuario};
+		\node[caja, below=1.4cm of usuario] (custodia) {Contrato de custodia\\(tokens bloqueados)};
+		\node[caja, right=2.6cm of usuario, fill=gray!15] (relayer) {\textit{Relayer} de confianza\\(clave privada)};
+		\node[caja, right=2.6cm of custodia] (acunador) {Contrato de destino\\(acuña el token
+			representativo)};
+
+		\node[cadena, fit=(custodia), label={[font=\footnotesize]below:Cadena de origen}] {};
+		\node[cadena, fit=(acunador), label={[font=\footnotesize]below:Cadena de destino}] {};
+
+		\draw[flecha] (usuario) -- node[left, dato] {1. bloqueo} (custodia);
+		\draw[flecha] (custodia) -- node[above, dato, sloped] {2. evento} (relayer);
+		\draw[flecha] (relayer) -- node[right, dato] {3. orden firmada\\de acuñación} (acunador);
+	\end{tikzpicture}
+	\caption[Puente de bloqueo y acuñación con un \textit{relayer} de confianza.]{Puente de bloqueo
+	y acuñación con un \textit{relayer} de confianza. El contrato de destino acepta cualquier orden
+	firmada con la clave del \textit{relayer}, por lo que la seguridad de los fondos depende
+	íntegramente de esa clave y de la honestidad de quien la controla.}
+	\label{fig:puente_confianza}
+\end{figure}
+
+\paragraph{Modelos de verificación.} La forma en que el contrato de destino responde a la
+pregunta anterior determina el supuesto de confianza del puente y permite clasificar los diseños
+existentes en cuatro familias~\cite{zhang2023bridgesok, belchior2021survey}, que se comparan en la
+Tabla~\ref{tab:puentes_verificacion}.
+
+En los puentes de \textbf{verificación externa}, un conjunto de agentes ajenos a ambas cadenas
+atestigua los eventos de origen y el contrato de destino se limita a comprobar sus firmas. El
+conjunto puede reducirse a un único \textit{relayer}, como en la Figura~\ref{fig:puente_confianza},
+o ampliarse a una multifirma que exige un umbral de firmas entre varios participantes, o a un comité que firma mediante
+computación multiparte. Estos diseños son económicos y rápidos, pero su seguridad equivale a la
+de las claves del conjunto, y un adversario que obtenga el umbral de firmas puede acuñar o
+liberar fondos sin que la cadena de destino pueda advertirlo.
+
+Los puentes de \textbf{verificación optimista} aceptan provisionalmente las afirmaciones de un
+agente y abren un período durante el cual cualquier vigilante (\textit{watcher}) puede impugnarlas
+con evidencia de fraude. Su supuesto de confianza se reduce a la existencia de al menos un
+vigilante honesto y activo durante cada período de impugnación, a cambio de una latencia que suele
+medirse en minutos u horas. Se trata del mismo principio que emplean los \textit{rollups}
+optimistas descritos en la Sección~\ref{sec:op_fraude}, trasladado a la comunicación entre cadenas
+independientes.
+
+Los puentes de \textbf{verificación nativa} ejecutan en la cadena de destino un cliente ligero de
+la cadena de origen, que comprueba las firmas de consenso de cada encabezado y, a partir de él, las
+pruebas de inclusión de cada operación. El protocolo IBC del ecosistema Cosmos es el ejemplo más
+extendido de este enfoque, y su especificación define cómo cada cadena mantiene clientes ligeros
+de sus contrapartes~\cite{ibcics02}. Con este diseño, el puente no añade supuestos de confianza
+a los de las propias cadenas, pero solo resulta viable cuando la verificación del consenso de
+origen es asequible en destino. Para Ethereum no lo es, ya que exigiría verificar firmas BLS
+agregadas sobre la curva BLS12-381 y cientos de hashes en cada actualización
+(Sección~\ref{sec:eth_cadena_verificacion}).
+
+Los puentes de \textbf{verificación con pruebas de conocimiento cero} resuelven esta limitación
+trasladando la ejecución del cliente ligero fuera de la cadena. Un probador ejecuta la
+verificación del consenso y de la inclusión y genera una prueba sucinta de que la ejecutó
+correctamente, mientras que el contrato de destino verifica únicamente esa prueba con un costo
+acotado~\cite{xie2022zkbridge}. El supuesto de confianza coincide con el del cliente ligero
+verificado, al que se suma la solidez del sistema de pruebas, y el agente que transmite la
+información deja de tener autoridad sobre el resultado, puesto que una prueba de un enunciado
+falso es rechazada sin importar quién la presente.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Modelos de verificación de puentes entre cadenas.}
+	\label{tab:puentes_verificacion}
+	\small
+	\begin{tabular}{>{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{4.4cm} >{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{4.2cm}}
+		\toprule
+		\textbf{Modelo} & \textbf{Supuesto de confianza} & \textbf{Latencia} &
+		\textbf{Costo en destino} \\
+		\midrule
+		Externa & Honestidad de al menos el umbral de firmantes & Baja & Bajo, comprobación de firmas
+		convencionales \\
+		\addlinespace
+		Optimista & Al menos un vigilante honesto y activo & Alta, por el período de impugnación &
+		Bajo en ausencia de disputas \\
+		\addlinespace
+		Nativa & Seguridad del consenso de origen & Baja & Alto, ejecución completa del cliente
+		ligero \\
+		\addlinespace
+		Conocimiento cero & Seguridad del consenso de origen y solidez del sistema de pruebas &
+		Media, por la generación de la prueba & Moderado, verificación de una prueba sucinta \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+\subsection{Incidentes de seguridad}
+\label{sec:puentes_incidentes}
+
+Los puentes concentran en sus contratos de custodia el respaldo de todos los tokens
+representativos que han emitido, lo que los convierte en objetivos de gran valor. Según
+Chainalysis, los ataques a puentes representaron el 69\,\% de los fondos sustraídos en el
+ecosistema de criptoactivos durante 2022 hasta el mes de agosto, con pérdidas cercanas a dos mil
+millones de dólares estadounidenses distribuidas en trece incidentes~\cite{chainalysis2022bridges}.
+La Tabla~\ref{tab:puentes_incidentes} reúne cinco de los casos de mayor magnitud de ese año, con
+la causa documentada por los propios equipos afectados o por los analistas que los investigaron.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Incidentes de seguridad relevantes en puentes entre cadenas durante 2022.}
+	\label{tab:puentes_incidentes}
+	\small
+	\begin{tabular}{>{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{1.5cm} >{\raggedright\arraybackslash}p{2.8cm} >{\raggedright\arraybackslash}p{4.6cm} >{\raggedright\arraybackslash}p{1.8cm}}
+		\toprule
+		\textbf{Puente} & \textbf{Fecha} & \textbf{Pérdida aproximada} & \textbf{Causa} &
+		\textbf{Modelo} \\
+		\midrule
+		Ronin~\cite{roninpostmortem} & Marzo & 173\,600 ETH y 25,5 millones de USDC (unos US\$\,620
+		millones) & Compromiso de cinco de las nueve claves de los validadores del puente & Externa \\
+		\addlinespace
+		Wormhole~\cite{wormholeincident} & Febrero & 120\,000 wETH (unos US\$\,325 millones) &
+		Omisión de la verificación de firmas de los guardianes en el contrato de Solana & Externa \\
+		\addlinespace
+		Harmony Horizon~\cite{harmonyhorizon} & Junio & Unos US\$\,100 millones & Robo de dos claves
+		de una multifirma de dos de cinco participantes & Externa \\
+		\addlinespace
+		Nomad~\cite{nomadrca} & Agosto & Unos US\$\,186 millones & Una actualización dejó como raíz
+		de confianza el valor cero, con lo que se aceptaron mensajes no probados & Optimista \\
+		\addlinespace
+		BNB Token Hub~\cite{verichainsbnb} & Octubre & 2 millones de BNB acuñados (unos US\$\,570
+		millones) & Falsificación de una prueba de Merkle IAVL aceptada por el verificador & Nativa \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+Los casos reunidos admiten dos lecturas complementarias. Los incidentes de Ronin y Harmony
+Horizon no explotaron ningún error de programación, sino que el adversario obtuvo las claves
+suficientes para firmar órdenes que el contrato de destino consideraba legítimas por
+definición~\cite{roninpostmortem, harmonyhorizon}. Se trata de la falla característica de la
+verificación externa, en la que la seguridad de los fondos se reduce a la custodia de unas pocas
+claves privadas, y es la que motiva la sustitución de la confianza en firmantes por verificación
+criptográfica del estado de origen.
+
+Los incidentes de Wormhole, Nomad y BNB Token Hub responden a una causa distinta. En los tres, la
+lógica de verificación existía, pero su implementación aceptaba evidencia que no debía aceptar.
+En Wormhole, el contrato no comprobó la autenticidad de la cuenta de la que leía las firmas
+verificadas, de modo que un mensaje falsificado pasó por válido~\cite{wormholeincident}. En
+Nomad, una actualización inicializó la raíz de confianza con el valor cero, que coincide con el
+valor por omisión de los mensajes nunca probados, y cualquier mensaje pasó a considerarse
+probado~\cite{nomadrca}. En BNB Token Hub, un defecto en la verificación de las pruebas de
+Merkle del árbol IAVL permitió construir una prueba falsa de un depósito
+inexistente~\cite{verichainsbnb}. Este último caso resulta especialmente ilustrativo, pues el
+puente verificaba pruebas de inclusión respecto del estado de la cadena de origen y aun así fue
+vulnerado. De ello se desprende que reemplazar a los firmantes por pruebas criptográficas elimina
+la primera clase de fallas, pero no la segunda. La seguridad del puente depende también de que el
+enunciado probado capture exactamente la condición de acuñación, de que el verificador esté
+correctamente implementado y de que el contrato receptor impida la reutilización de una misma
+prueba, consideraciones que ya se anticiparon en el Capítulo~\ref{chp:conocimiento_cero} y que se
+retoman al analizar el diseño propuesto en la Sección~\ref{sec:puente_aceptacion}.
+
+\subsection{Estado del arte}
+\label{sec:puentes_estado_arte}
+
+La propuesta que estableció la viabilidad práctica de los puentes verificados con pruebas de
+conocimiento cero es zkBridge, de Xie et al.~\cite{xie2022zkbridge}. Su arquitectura separa un
+contrato actualizador, que incorpora encabezados de la cadena de origen solo cuando se acompañan
+de una prueba de que satisfacen la regla de validación del cliente ligero, de los contratos de
+aplicación, que verifican sobre esos encabezados las pruebas de inclusión de cada operación. Para
+que la generación de las pruebas resulte viable, los autores introdujeron deVirgo, una versión
+distribuida del sistema de pruebas Virgo que reparte el circuito entre varias máquinas, y una
+segunda capa que demuestra con Groth16 la validez de la prueba anterior, a fin de reducir el
+costo de verificación en destino. El análisis detallado de esta propuesta y su relación con el
+diseño de este trabajo se presentan en la Sección~\ref{sec:zkbridge_berkeley}.
+
+Polyhedra Network llevó esta propuesta a un despliegue comercial, con clientes ligeros de varias
+cadenas verificados mediante la misma combinación de deVirgo y una capa recursiva basada en
+Groth16. Según sus autores, la capa recursiva reduce el costo de verificación en Ethereum desde
+unos 80 millones de unidades de gas hasta unas 227\,000~\cite{polyhedrazkbridge}. Al tratarse de
+cifras informadas por el propio equipo de desarrollo, se consignan como referencia y no como
+resultado verificado de forma independiente.
+
+Succinct Labs desarrolló Telepathy, un cliente ligero de Ethereum para otras cadenas que verifica
+dentro de un circuito las firmas del comité de sincronización descrito en la
+Sección~\ref{sec:eth_sync_committee}, en lugar de la finalidad del conjunto completo de
+validadores~\cite{succinctproofconsensus, telepathydocs}. Telepathy separa dos operaciones. La
+primera prueba que una supermayoría del comité vigente firmó un nuevo encabezado, y la segunda
+prueba que el comité del período siguiente fue seleccionado correctamente, lo que permite al
+contrato rotar el comité sin depender de su propietario~\cite{telepathydocs}. El sistema se empleó
+para dar seguridad al puente entre Ethereum y Gnosis Chain~\cite{succinctproofconsensus}.
+
+Con la aparición de las máquinas virtuales de conocimiento cero, el mismo equipo publicó SP1
+Helios, que reemplaza el circuito escrito a mano por un programa en Rust ejecutado en la zkVM SP1
+(Sección~\ref{sec:sp1}). El programa reutiliza la biblioteca de cliente ligero Helios para
+comprobar que el encabezado de consenso fue firmado por el comité de sincronización y que el
+encabezado de ejecución contenido en él es correcto, y el contrato de destino verifica la prueba
+resultante~\cite{sp1helios}. Este cambio ilustra la alternativa que se estudia en el presente
+trabajo, en la que el enunciado deja de expresarse como un circuito en un lenguaje específico y
+pasa a expresarse como un programa convencional cuya ejecución se demuestra.
+
+Las propuestas reseñadas comparten el supuesto de confianza en el comité de sincronización, que
+es también el adoptado en este trabajo, y se concentran en la verificación del consenso, dejando
+la prueba de inclusión de cada operación a cargo de las aplicaciones. El presente trabajo se
+diferencia de ellas en tres aspectos. En primer lugar, demuestra en un mismo sistema el consenso y
+la inclusión de la operación de bloqueo, incluida la ejecución exitosa registrada en su recibo.
+En segundo lugar, implementa el mismo enunciado con dos herramientas de naturaleza distinta, el
+lenguaje de circuitos Noir y la zkVM SP1, lo que permite compararlas en condiciones equivalentes.
+En tercer lugar, despliega la verificación en una red de segunda capa, Optimism Sepolia, cuyas
+particularidades de costo se describieron en la Sección~\ref{sec:op_tarifas}. El diseño
+resultante se expone en el Capítulo~\ref{chp:zkbridge}.

@@ -1,0 +1,233 @@
+\section{Metodología de comparación}
+\label{sec:metodologia}
+
+La comparación entre ambas implementaciones persigue el tercer objetivo específico, es decir,
+medir el tiempo de generación de las pruebas, el uso de recursos de cómputo y de memoria y el costo
+de verificación, y caracterizar con esos datos las ventajas y desventajas de cada herramienta.
+Esta sección define el enunciado medido, la correspondencia entre las etapas de Noir y de SP1, la
+instrumentación empleada, las métricas que se derivan de ella y las condiciones que limitan el
+alcance de las mediciones.
+
+\subsection{Enunciado medido y alcance}
+\label{sec:metodologia_alcance}
+
+Las mediciones del costo de generación se concentran en la verificación de la firma agregada del comité
+de sincronización, es decir, en la comprobación de la Ecuación~\eqref{eq:bls_agregada} sobre la
+raíz de firma de un encabezado de la cadena de baliza. Esta verificación constituye el núcleo del
+programa de consenso de ambas implementaciones (Secciones~\ref{sec:noir_impl_consenso}
+y~\ref{sec:sp1_impl_consenso}) y es, a la vez, su parte más costosa, puesto que exige descomprimir
+y sumar claves de la curva BLS12-381, transformar el mensaje en un punto de $\mathbb{G}_2$ y
+evaluar emparejamientos. Ambas implementaciones procesaron la misma entrada, correspondiente a una
+actualización del comité cuya raíz de firma es
+\texttt{0xe4ad1c23\ldots 2a33401a}, y en ambos casos la verificación concluyó con resultado
+válido. En Noir, el circuito medido, \texttt{noir\_bls12\_381\_validator}, corresponde a una
+versión anterior del programa de consenso, que recibía el punto del mensaje y la clave pública
+como entradas no vinculadas al comité ni al encabezado. Ese circuito no incluía, por lo tanto, la
+transformación del mensaje en un punto de $\mathbb{G}_2$ ni la vinculación de las claves con el
+compromiso del comité, operaciones que sí realiza el programa de SP1 medido. Los circuitos de
+consenso que integran el puente, descritos en la Sección~\ref{sec:resultados_gas}, no se midieron
+en el servidor.
+
+Los costos del puente se organizan en tres ejes, ya anunciados en la
+Sección~\ref{sec:op_tarifas}. El primero es el gas de ejecución de las transacciones de anclaje y
+de acuñación. El segundo es su costo monetario en Optimism Sepolia, que resulta del gas consumido,
+del precio efectivo del gas y de las tarifas propias de la capa 2. El tercero es el costo de generar
+las pruebas fuera de la cadena. Las mediciones de las etapas de generación, descritas en las
+subsecciones siguientes, corresponden al tercer eje y se limitan al programa de consenso, ya que
+las etapas del programa de inclusión no se midieron con la misma instrumentación. El primer eje se
+cubre con la medición del gas de los contratos verificadores de ambas herramientas, de las
+transacciones completas de anclaje y de acuñación de Noir y de la lógica de anclaje de SP1
+(Sección~\ref{sec:metodologia_gas}). En SP1 no se midió una transacción completa de anclaje ni de
+acuñación. El segundo eje no se midió.
+
+\subsection{Correspondencia entre etapas}
+\label{sec:metodologia_etapas}
+
+Noir y SP1 recorren etapas equivalentes, aunque las distribuyen de forma distinta entre las
+herramientas que las ejecutan (Secciones~\ref{sec:noir_flujo} y~\ref{sec:sp1_flujo}). En ambos
+casos, el programa se compila, se ejecuta sobre la entrada para obtener el testigo o la traza, se
+deriva la clave de verificación, se genera la prueba y se la verifica. La
+Tabla~\ref{tab:metodologia_etapas} recoge la orden ejecutada en cada etapa y la frecuencia con que
+debe repetirse durante la operación del puente. Esta frecuencia es la que permite distinguir los
+costos fijos, que se pagan una vez por versión del programa, de los costos que se pagan en cada
+prueba.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Correspondencia entre las etapas medidas en Noir y en SP1.}
+	\label{tab:metodologia_etapas}
+	\small
+	\begin{tabular}{>{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{4.3cm} >{\raggedright\arraybackslash}p{4.3cm} >{\raggedright\arraybackslash}p{2.6cm}}
+		\toprule
+		\textbf{Etapa} & \textbf{Noir} & \textbf{SP1} & \textbf{Frecuencia} \\
+		\midrule
+		Compilación & \texttt{nargo compile} & \texttt{cargo prove build} & Una vez por versión
+		del programa \\
+		\addlinespace
+		Testigo o ejecución & \texttt{nargo execute} & Anfitrión con \texttt{-{}-execute} & En cada
+		prueba \\
+		\addlinespace
+		Clave de verificación & \texttt{bb write\_vk} & Anfitrión \texttt{vkey} & Una vez por
+		versión del programa \\
+		\addlinespace
+		Prueba & \texttt{bb prove} & Anfitrión con \texttt{-{}-prove} & En cada prueba \\
+		\addlinespace
+		Verificación & \texttt{bb verify} & Incluida en la etapa de prueba & En cada prueba \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+La correspondencia presenta dos asimetrías que deben tenerse en cuenta al interpretar los
+resultados. En SP1, la etapa de prueba ejecuta en una sola orden la ejecución del programa, la
+generación de la prueba y su verificación local, de modo que su tiempo incluye trabajo que en Noir
+se distribuye entre tres etapas. La etapa de ejecución de SP1 se midió por separado porque informa
+el número de ciclos del programa, pero no forma parte del costo por prueba, ya que la etapa de
+prueba la repite internamente. En Noir, en cambio, el testigo que produce \texttt{nargo execute}
+es una entrada necesaria de \texttt{bb prove}, por lo que su tiempo sí integra el costo de cada
+prueba.
+
+\subsection{Instrumentación y entorno}
+\label{sec:metodologia_instrumentacion}
+
+Cada etapa se ejecutó bajo la orden \texttt{/usr/bin/time -v}, que registra al finalizar el
+proceso el tiempo transcurrido de reloj, el tiempo de procesador en modo usuario y en modo
+sistema, el porcentaje de uso del procesador, la memoria residente máxima, los fallos de página,
+las operaciones de entrada desde el sistema de archivos y el código de salida. El porcentaje de uso
+del procesador resulta del cociente entre el tiempo de procesador y el tiempo de reloj, de modo que
+un valor superior al 100\,\% indica que el proceso empleó varios hilos en paralelo. La memoria
+residente máxima se informa en gibibytes (GiB), equivalentes a $2^{30}$ bytes. Las etapas también
+se ejecutaron bajo \texttt{strace}, pero sus registros solo contienen las llamadas al sistema del
+intérprete de órdenes que lanzó cada proceso y no las del proceso medido, por lo que se descartaron.
+
+Ambas implementaciones se midieron en el mismo servidor, una máquina virtual de Oracle Cloud
+Infrastructure de la forma \texttt{VM.Standard3.Flex} con sistema operativo Linux, configurada con
+7 OCPU y 90 GB de memoria. En esta forma, cada OCPU corresponde a un núcleo físico del procesador
+con dos hilos de ejecución~\cite{ocicomputeshapes}, de modo que el servidor disponía de 14 hilos y
+el porcentaje de uso del procesador podía alcanzar, como máximo, el 1400\,\%. El servidor contaba
+además con 150 GB de almacenamiento dedicados al área de intercambio, que el sistema operativo
+emplea como extensión de la memoria cuando un proceso supera la memoria física disponible. La
+generación de las pruebas se realizó exclusivamente en el procesador. En SP1 esto corresponde a la
+variable \texttt{SP1\_PROVER=cpu}, y en Noir al comportamiento predeterminado de Barretenberg. Las
+órdenes de Barretenberg se ejecutaron con sus opciones predeterminadas, sin indicar de forma
+explícita el objetivo de verificación de la prueba. Las mediciones de SP1 se obtuvieron
+entre el 21 y el 22 de julio de 2026, con la cadena de compilación de Succinct basada en
+\texttt{rustc} 1.94.0, y las de Noir concluyeron el 10 de agosto de 2026, con Nargo
+1.0.0-beta.22 y Barretenberg 5.0.0-nightly.20260522. Cada etapa se ejecutó una sola vez. SP1 se ejecutó también en el modo
+simulado (\texttt{SP1\_PROVER=mock}), que omite la generación real de la prueba y está destinado al
+desarrollo. En ese modo, la etapa de prueba terminó con el código de salida 101, porque el
+anfitrión intentó verificar una prueba de núcleo vacía, de modo que esas mediciones solo se emplean
+como referencia del costo de ejecución sin probador.
+\subsection{Medición del costo de verificación}
+\label{sec:metodologia_gas}
+
+El costo de verificación se midió como el gas de ejecución de las transacciones que verifican las
+pruebas en contratos desplegados en redes locales. Esta magnitud no depende del precio del gas
+(Sección~\ref{sec:eth_gas}) e incluye el costo intrínseco de la transacción, de 21\,000 unidades,
+y el de sus datos, de modo que cada cifra representa una transacción completa. Las mediciones se
+realizaron en noviembre de 2026.
+
+El gas de una misma transacción depende de las reglas de la versión de la EVM que aplica la red. La
+actualización Osaka de Ethereum incrementó, mediante la propuesta EIP-7883, el costo del contrato
+precompilado MODEXP~\cite{eip7883}, que el verificador de UltraHonk emplea, e introdujo con la
+propuesta EIP-7825 un límite de $2^{24}$ unidades de gas por transacción~\cite{eip7825}. Optimism
+Sepolia aplica ambas propuestas desde su actualización 19~\cite{oposakal2}, de modo que las reglas
+posteriores a Osaka son las que representan la cadena de destino. Las mediciones de Noir se
+realizaron con esas reglas, en una red de Anvil configurada con la bifurcación BPO1, y se
+repitieron con las reglas de la versión anterior, Prague, en la red que Hardhat ejecuta dentro de
+su propio proceso~\cite{hardhatdocs}, para permitir la comparación entre ambas.
+
+En Noir, se generaron pruebas reales de los dos circuitos de consenso y del circuito de inclusión
+con Barretenberg 5.0.0-nightly.20260522 y el destino \lstinline|evm|, que emplea Keccak en la
+transcripción de Fiat-Shamir, y se obtuvo el contrato verificador de cada circuito mediante la orden
+\texttt{bb write\_solidity\_verifier -t evm} (Sección~\ref{sec:noir_impl_publicas}). Los contratos
+se compilaron con solc 0.8.28, con el optimizador activado y el parámetro \texttt{runs} igual a
+uno. Se midieron la transacción de anclaje, que verifica las dos pruebas de consenso y registra las
+raíces de transacciones y de recibos del bloque, la transacción de acuñación, que verifica la prueba de inclusión y
+acuña el activo, y el gas de cada verificación por separado. Las pruebas se generaron en un equipo
+distinto del servidor de la Sección~\ref{sec:metodologia_instrumentacion}, un computador Mac con
+18 GB de memoria, por lo que sus tiempos de generación no se comparan con los de la
+Sección~\ref{sec:resultados_etapas}.
+
+En SP1, se empleó el contrato verificador Groth16 oficial de la versión 6.1.0, que coincide con la
+del kit de desarrollo que resuelven las dependencias del programa de consenso~\cite{sp1contracts}, compilado con solc 0.8.24, el optimizador
+activado, el parámetro \texttt{runs} igual a uno y la versión \texttt{shanghai} de la EVM, y
+desplegado en Anvil 1.3.5~\cite{anvildocs} con las reglas de la bifurcación Cancun. La función
+de verificación de ese contrato solo emplea los precompilados de suma, de multiplicación escalar y
+de emparejamiento de la curva BN254 y el de SHA-256~\cite{sp1contracts}, cuyos precios no
+modificaron las actualizaciones Prague ni Osaka, por lo que las cifras obtenidas con esas reglas
+son válidas también para la cadena de destino. Como no se disponía de una prueba Groth16 del programa
+de consenso, la verificación se midió con una prueba Groth16 válida de otro programa, publicada por
+un proyecto independiente y compatible con esa versión del verificador~\cite{zekofixture}. Esta
+sustitución es admisible porque el costo de verificar una prueba Groth16 no depende del programa
+probado (Sección~\ref{sec:snarks_starks}) y solo varía con el tamaño de los valores públicos, que
+se incorporan mediante su hash y forman parte de los datos de la transacción. Esa variación se
+cuantifica en la Sección~\ref{sec:resultados_gas}. La lógica de \texttt{BeaconLightClient} se
+midió por separado, con un verificador simulado que acepta cualquier prueba y con los valores
+públicos de 416 bytes de la versión actual del programa de consenso, obtenidos de una actualización
+real de Ethereum Sepolia con 509 de los 512 miembros del comité como firmantes.
+
+Ambas mediciones incluyeron controles de validez. En SP1, la prueba válida fue aceptada y la misma
+prueba con un byte modificado fue rechazada mediante la reversión de la llamada. En Noir, las
+pruebas automatizadas del puente comprobaron, además, el rechazo de las transacciones con una
+raíz de transacciones o de recibos alterada, con una prueba de firma adulterada, con un compromiso
+del comité distinto del registrado, con un par de raíces que no se anclaron juntas y con entradas
+públicas de inclusión modificadas, como un destinatario distinto. Las pruebas del circuito de
+inclusión comprobaron, por su parte, el rechazo de un bloqueo revertido, de una transacción de
+otra posición, alterada o dirigida a otra función o a otra dirección, de un evento o de un emisor
+equivocados y de raíces falsas. En SP1, estos controles se
+repitieron sobre el verificador oficial ya desplegado en Optimism Sepolia, y se comprobó además en
+esa red el gas que cobran los contratos precompilados de la curva BN254, mediante llamadas que no
+modifican el estado. Ninguna medición envió transacciones a una red pública, por lo que no se
+obtuvo el costo monetario de las transacciones.
+
+\subsection{Métricas derivadas}
+\label{sec:metodologia_metricas}
+
+A partir de las mediciones por etapa se derivan dos métricas que permiten comparar ambas
+herramientas en condiciones de uso. La primera es el \textbf{costo en frío}, definido como la suma
+de los tiempos de todas las etapas, que representa el tiempo necesario para obtener la primera
+prueba desde el código fuente. La segunda resulta de separar el costo fijo $t_{\mathrm{fijo}}$,
+formado por la compilación y la obtención de la clave de verificación, del costo por prueba
+$t_{\mathrm{prueba}}$, formado por las etapas que se repiten en cada prueba según la
+Tabla~\ref{tab:metodologia_etapas}. El tiempo total necesario para generar $n$ pruebas con un
+mismo programa es, en consecuencia,
+\begin{equation}
+	\label{eq:costo_total}
+	t_{\mathrm{total}}(n) = t_{\mathrm{fijo}} + n \, t_{\mathrm{prueba}}.
+\end{equation}
+Si una herramienta presenta un costo fijo mayor y un costo por prueba menor que la otra, existe un
+número de pruebas a partir del cual su tiempo total resulta inferior. Ese \textbf{punto de
+equilibrio} $n^{*}$ se obtiene igualando la Ecuación~\eqref{eq:costo_total} para ambas
+herramientas, lo que conduce a
+\begin{equation}
+	\label{eq:punto_equilibrio}
+	n^{*} = \frac{t^{\mathrm{Noir}}_{\mathrm{fijo}} - t^{\mathrm{SP1}}_{\mathrm{fijo}}}
+	{t^{\mathrm{SP1}}_{\mathrm{prueba}} - t^{\mathrm{Noir}}_{\mathrm{prueba}}},
+\end{equation}
+donde los superíndices identifican la herramienta a la que corresponde cada término.
+
+\subsection{Condiciones de validez}
+\label{sec:metodologia_validez}
+
+Seis condiciones acotan la comparabilidad de las mediciones. En primer lugar, la compilación de
+SP1 se midió con el ejecutable del programa invitado ya generado, según indica el propio registro
+de la orden, que informa la finalización de la compilación en 0,15 segundos. El tiempo obtenido
+refleja, por lo tanto, la comprobación de que el ejecutable está actualizado y no la compilación
+completa del programa. En segundo lugar, la prueba de SP1 medida es la prueba de núcleo, cuyo
+tamaño crece con la extensión de la ejecución (Sección~\ref{sec:sp1_flujo}), y no la prueba
+Groth16 que verifica el contrato de destino, por lo que su tiempo no incluye la compresión
+recursiva ni la envoltura descritas en la Sección~\ref{sec:sp1_impl_integracion}. En tercer lugar,
+el programa de SP1 no emplea los precompilados de la máquina virtual para SHA-256 ni para
+BLS12-381 (Sección~\ref{sec:sp1_impl}), de modo que la aritmética de la curva se ejecuta como
+instrucciones RISC-V ordinarias. En cuarto lugar, las órdenes de Barretenberg no
+indican de forma explícita el objetivo de verificación, y los registros no permiten establecer si
+la prueba de Noir medida emplea la función de hash que exige el verificador desplegado en la
+cadena de destino. En quinto lugar, el circuito de Noir medido en el servidor corresponde a una
+versión anterior del programa de consenso, que no transforma el mensaje en un punto de
+$\mathbb{G}_2$ ni vincula las claves con el compromiso del comité
+(Sección~\ref{sec:metodologia_alcance}), de modo que demuestra un enunciado menor que el del
+programa de SP1 y que el de los circuitos que integran el puente. En sexto lugar, cada etapa se
+ejecutó una sola vez, por lo que los resultados no permiten estimar la variabilidad de las
+mediciones. Estas condiciones no invalidan
+la comparación, pero determinan el sentido en que cada resultado debe interpretarse, aspecto que se
+retoma en la Sección~\ref{sec:resultados_discusion}.

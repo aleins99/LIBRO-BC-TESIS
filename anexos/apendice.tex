@@ -1,4 +1,243 @@
-%------------------------------------------------------
-%------------------------------------------------------
+\section{Entorno y datos de las mediciones}
+\label{sec:apendice_mediciones}
 
-\section{A}
+Este apartado reúne el entorno, las versiones, las órdenes y los registros completos de las
+mediciones descritas en la Sección~\ref{sec:metodologia}, con el fin de permitir su reproducción y
+su contraste con los valores derivados de la Sección~\ref{sec:resultados}.
+
+\subsection{Entorno y versiones}
+\label{sec:apendice_entorno}
+
+La Tabla~\ref{tab:apendice_entorno} resume los equipos y las herramientas empleados en cada grupo
+de mediciones. Las etapas de generación de ambas herramientas se midieron en el mismo servidor,
+mientras que las mediciones de gas se realizaron en redes locales, con comprobaciones adicionales
+sobre Optimism Sepolia en el caso de SP1.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Equipos, redes y versiones de las herramientas empleadas en las mediciones.}
+	\label{tab:apendice_entorno}
+	\footnotesize
+	\begin{tabular}{>{\raggedright\arraybackslash}p{3.3cm} >{\raggedright\arraybackslash}p{5.9cm} >{\raggedright\arraybackslash}p{5.9cm}}
+		\toprule
+		\textbf{Elemento} & \textbf{Noir} & \textbf{SP1} \\
+		\midrule
+		\multicolumn{3}{l}{\textit{Generación de las pruebas}} \\
+		\addlinespace
+		Equipo & \multicolumn{2}{p{11.8cm}}{Máquina virtual de Oracle Cloud Infrastructure, forma
+		\texttt{VM.Standard3.Flex}, con 7 OCPU (14 hilos), 90 GB de memoria y 150 GB de
+		almacenamiento para el área de intercambio, sistema operativo Linux y generación
+		exclusivamente en el procesador.} \\
+		\addlinespace
+		Herramientas & Nargo 1.0.0-beta.22 (commit \texttt{c57152f9}) y Barretenberg
+		5.0.0-nightly.20260522 & \texttt{sp1-sdk} 6.1.0, cadena de compilación de Succinct basada en
+		\texttt{rustc} 1.94.0 y \texttt{SP1\_PROVER=cpu} \\
+		\addlinespace
+		Programa medido & \texttt{noir\_bls12\_381\_validator}, versión anterior del circuito de consenso & \texttt{sync-committee-program},
+		66\,378\,401 ciclos \\
+		\addlinespace
+		Fecha & Última ejecución el 10 de agosto de 2026 & 21 y 22 de julio de 2026 \\
+		\midrule
+		\multicolumn{3}{l}{\textit{Verificación en la cadena de destino}} \\
+		\addlinespace
+		Equipo y red & Computador Mac con 18 GB de memoria, Anvil con la bifurcación BPO1 (reglas
+		posteriores a Osaka) y red de Hardhat en el propio proceso (reglas de Prague) & Anvil 1.3.5 (commit \texttt{9979a41b}), bifurcación Cancun, identificador de
+		cadena 31337, y Node 20.20.2 \\
+		\addlinespace
+		Compilador & solc 0.8.28, optimizador activado, \texttt{runs = 1} &
+		solc 0.8.24, optimizador activado, \texttt{runs = 1}, \texttt{viaIR} desactivado, EVM
+		\texttt{shanghai} \\
+		\addlinespace
+		Verificador & Un contrato por circuito, generado por \texttt{bb write\_solidity\_verifier -t evm}
+		con Noir 1.0.0-beta.22 y Barretenberg 5.0.0-nightly.20260522 &
+		\texttt{SP1VerifierGroth16} v6.1.0 de \texttt{sp1-contracts}, commit
+		\texttt{d3629729}~\cite{sp1contracts} \\
+		\addlinespace
+		Red pública & Ethereum Sepolia, solo como cadena de origen de la ejecución de punta a punta & Optimism Sepolia, identificador 11155420, bloque
+		51\,307\,662, verificador desplegado en
+		\texttt{0xb69f2584CBcFf99a}\allowbreak\texttt{58C4e7002E8b89Af54a6f4e2} \\
+		\addlinespace
+		Fecha & Noviembre de 2026 & 11 de noviembre de 2026 \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+\subsection{Órdenes ejecutadas}
+\label{sec:apendice_ordenes}
+
+Cada etapa de generación se ejecutó mediante \texttt{/usr/bin/time -v bash -c} seguido de la
+orden correspondiente, que se transcribe a continuación tal como figura en los registros.
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize, breaklines=true, columns=fullflexible]
+# Noir
+nargo compile
+nargo execute witness
+bb write_vk -b target/noir_bls12_381_validator.json -o target/
+bb prove -b target/noir_bls12_381_validator.json -w target/witness.gz -k target/vk -o target/
+bb verify -k target/vk -p target/proof -i target/public_inputs
+
+# SP1 (SP1_PROVER=cpu)
+cd program && cargo prove build
+cargo run --release -p sync-committee-script --bin sync-committee -- --execute --data data.json
+cargo run --release -p sync-committee-script --bin vkey
+cargo run --release -p sync-committee-script --bin sync-committee -- --prove --data data.json
+\end{lstlisting}
+
+\subsection{Registros de las etapas de generación}
+\label{sec:apendice_registros}
+
+Las Tablas~\ref{tab:apendice_registros_noir} y~\ref{tab:apendice_registros_sp1} transcriben los
+campos de \texttt{/usr/bin/time -v} de cada etapa en sus unidades originales. La memoria residente
+máxima se expresa en kibibytes, y las entradas y salidas del sistema de archivos, en bloques de 512
+bytes. Todas las etapas terminaron con el código de salida cero.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Registros de \texttt{/usr/bin/time -v} de las etapas de Noir.}
+	\label{tab:apendice_registros_noir}
+	\footnotesize
+	\setlength{\tabcolsep}{4pt}
+	\begin{tabular}{>{\raggedright\arraybackslash}p{3.1cm} *{5}{>{\raggedleft\arraybackslash}p{2.2cm}}}
+		\toprule
+		\textbf{Campo} & \textbf{Compilación} & \textbf{Testigo} & \textbf{Clave} & \textbf{Prueba} &
+		\textbf{Verificación} \\
+		\midrule
+		Tiempo de reloj & 1:28:17 & 1:35,31 & 0:59,54 & 1:24,36 & 0:00,01 \\
+		Tiempo de usuario (s) & 3220,38 & 92,06 & 236,39 & 623,91 & 0,01 \\
+		Tiempo de sistema (s) & 161,42 & 3,35 & 9,33 & 19,99 & 0,00 \\
+		Uso del procesador & 63\,\% & 100\,\% & 412\,\% & 763\,\% & 160\,\% \\
+		Memoria residente máxima (KiB) & 90\,948\,544 & 4\,600\,272 & 18\,063\,240 & 19\,972\,232 &
+		8\,768 \\
+		Fallos de página mayores & 3\,043\,192 & 0 & 18 & 2 & 1 \\
+		Entradas del sistema de archivos & 127\,531\,904 & 8 & 2\,148\,672 & 1\,472 & 48 \\
+		Salidas del sistema de archivos & 223\,624 & 65\,344 & 16 & 40 & 0 \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+	\centering
+	\caption{Registros de \texttt{/usr/bin/time -v} de las etapas de SP1.}
+	\label{tab:apendice_registros_sp1}
+	\footnotesize
+	\setlength{\tabcolsep}{4pt}
+	\begin{tabular}{>{\raggedright\arraybackslash}p{3.6cm} *{4}{>{\raggedleft\arraybackslash}p{2.4cm}}}
+		\toprule
+		\textbf{Campo} & \textbf{Compilación} & \textbf{Ejecución} & \textbf{Clave} &
+		\textbf{Prueba} \\
+		\midrule
+		Tiempo de reloj & 0:00,58 & 0:36,67 & 0:05,55 & 17:09,45 \\
+		Tiempo de usuario (s) & 0,41 & 353,90 & 38,61 & 11\,429,80 \\
+		Tiempo de sistema (s) & 0,17 & 3,91 & 0,45 & 386,92 \\
+		Uso del procesador & 101\,\% & 975\,\% & 703\,\% & 1147\,\% \\
+		Memoria residente máxima (KiB) & 122\,372 & 7\,080\,364 & 604\,972 & 90\,644\,680 \\
+		Fallos de página mayores & 0 & 0 & 79 & 527\,632 \\
+		Entradas del sistema de archivos & 0 & 0 & 201\,296 & 5\,899\,464 \\
+		Salidas del sistema de archivos & 0 & 8 & 416 & 8 \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+\subsection{Registros de las mediciones de gas}
+\label{sec:apendice_gas}
+
+La Tabla~\ref{tab:apendice_gas_sp1} detalla las mediciones de gas de SP1 sobre Anvil, con la
+estimación obtenida mediante \texttt{eth\_estimateGas} y el consumo registrado en el recibo de
+cada transacción. Ambas columnas incluyen el costo intrínseco de 21\,000 unidades y el de los datos de la transacción. En la red local, la
+dirección del verificador fue \texttt{0x5FbDB2315678afecb367f032d93F642f64180aa3}, y su función
+\texttt{VERIFIER\_HASH} devolvió
+\texttt{0x4388a21c687fdd5f218d}\allowbreak\texttt{7e3d13190cac4c5355818d}\allowbreak\texttt{3605fd5fb811df468ee696}, el mismo valor que el
+verificador desplegado en Optimism Sepolia. La prueba alterada, obtenida modificando el último byte
+de la prueba, revirtió con el error \texttt{ProofInvalid()}, de selector \texttt{0x7fcdd1f4}, en
+ambas redes. En Optimism Sepolia, el verificador desplegado devolvió una estimación de 259\,224
+unidades de gas para la prueba válida, y la repetición de estos controles en el bloque
+51\,361\,939 arrojó la misma estimación y confirmó los precios de los precompilados. Las
+mediciones de \texttt{updateHeader} emplearon los valores públicos de una actualización real de
+Ethereum Sepolia con 509 de 512 firmantes. Su código no es idéntico al compilado localmente, por lo que
+esta cifra no se combina con las de la tabla.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Gas de las operaciones de SP1 medidas sobre Anvil.}
+	\label{tab:apendice_gas_sp1}
+	\footnotesize
+	\begin{tabular}{>{\raggedright\arraybackslash}p{6.8cm} >{\raggedleft\arraybackslash}p{2.6cm} >{\raggedleft\arraybackslash}p{2.2cm} >{\raggedleft\arraybackslash}p{1.8cm}}
+		\toprule
+		\textbf{Operación} & \textbf{Estimación} & \textbf{Recibo} &
+		\textbf{Datos (bytes)} \\
+		\midrule
+		\texttt{verifyProof} con la prueba Groth16 válida & 259\,608 & 253\,395 & 1\,156 \\
+		Hash de los valores públicos de la prueba empleada & 29\,072 & 29\,072 & 676 \\
+		Hash de valores públicos de 320 bytes, versión anterior del programa & 25\,825 & 25\,825 & 388 \\
+		\texttt{updateHeader} con verificador simulado, primer anclaje & 85\,340 & 85\,340 & No informado \\
+		\texttt{updateHeader} con verificador simulado, anclaje ordinario & 68\,240 & 68\,240 & No informado \\
+		\texttt{setCommittee}, rotación del compromiso & 30\,127 & 30\,127 & 36 \\
+		\texttt{updateHeader} con verificador simulado, tras la rotación & 68\,240 & 68\,240 & No informado \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+La Tabla~\ref{tab:apendice_precompilados} recoge el gas mínimo con que cada contrato precompilado
+de la curva BN254 produjo el resultado esperado en Optimism Sepolia. En todos los casos, la misma
+llamada con una unidad de gas menos falló.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Gas de los contratos precompilados de BN254 comprobado en Optimism Sepolia.}
+	\label{tab:apendice_precompilados}
+	\footnotesize
+	\begin{tabular}{>{\raggedright\arraybackslash}p{2.2cm} >{\raggedright\arraybackslash}p{6.6cm} >{\raggedleft\arraybackslash}p{2.6cm}}
+		\toprule
+		\textbf{Dirección} & \textbf{Operación} & \textbf{Gas} \\
+		\midrule
+		\texttt{0x06} & Suma de un punto consigo mismo & 150 \\
+		\texttt{0x07} & Multiplicación del generador por dos & 6\,000 \\
+		\texttt{0x08} & Emparejamiento de dos pares que se cancelan & 113\,000 \\
+		\texttt{0x08} & Emparejamiento de cuatro pares que se cancelan & 181\,000 \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+La Tabla~\ref{tab:apendice_circuitos_noir} detalla las características de los circuitos de Noir
+que integran el puente y de sus contratos verificadores. En la ejecución de punta a punta, la
+transacción de bloqueo en Ethereum Sepolia fue
+\texttt{0xcc943f29e0b5973be022}\allowbreak\texttt{92d2f9f4e0615a49bd584d}\allowbreak\texttt{9e7a784f363cd4df8a73d3},
+incluida en la posición 97 del bloque 12\,122\,052, y la firma del comité correspondió al
+\textit{slot} 11\,565\,990, con 509 de 512 participantes. Las pruebas automatizadas de los
+contratos emplearon, además, pruebas reales de otra firma de Ethereum Sepolia, del \textit{slot}
+11\,565\,917, con 500 de 512 participantes, correspondiente al bloque 12\,121\,982, y las del
+circuito de inclusión, transacciones y recibos reales de un bloque de una red local de Hardhat con
+20 transacciones adicionales. El circuito de inclusión limita la transacción serializada a
+256 bytes, frente a los 173 a 181 que ocupa una transacción de bloqueo, y con las cotas del árbol
+de recibos alcanzaba 4,94 millones de compuertas, lo que lo habría llevado a $2^{23}$ filas.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Características de los circuitos de Noir que integran el puente.}
+	\label{tab:apendice_circuitos_noir}
+	\footnotesize
+	\begin{tabular}{>{\raggedright\arraybackslash}p{4.2cm} *{3}{>{\raggedleft\arraybackslash}p{3.0cm}}}
+		\toprule
+		\textbf{Característica} & \textbf{Comité} & \textbf{Emparejamiento} & \textbf{Inclusión} \\
+		\midrule
+		Compuertas & 3\,117\,372 & 8\,170\,394 & 4\,105\,601 \\
+		Tamaño del circuito (filas) & $2^{22}$ & $2^{23}$ & $2^{22}$ \\
+		Tamaño de la prueba (bytes) & 11\,072 & 11\,456 & 11\,072 \\
+		Entradas públicas & 7 & 1 & 168 \\
+		Código del verificador (bytes) & 17\,532 & 17\,155 & 17\,407 \\
+		Gas de la verificación, Osaka & 4\,489\,878 & 4\,578\,014 & 4\,745\,084 \\
+		Gas de la verificación, Prague & 3\,077\,258 & 3\,133\,115 & 3\,332\,963 \\
+		Tiempo de generación de la prueba & 23 s & 75 s & 23 s \\
+		Tiempo de compilación & 78 s & 32 min & No informado \\
+		\bottomrule
+	\end{tabular}
+
+	\vspace{0.5em}
+	\begin{minipage}{0.95\textwidth}
+		\footnotesize
+		Los tiempos son aproximados y se obtuvieron en el computador Mac de 18 GB de memoria. Las
+		siete entradas del circuito del comité son el compromiso del comité, las dos mitades de
+		128 bits de la raíz de recibos y de la raíz de transacciones, el \textit{slot} y el valor de enlace, y la única del
+		circuito de emparejamiento es ese mismo valor de enlace.
+	\end{minipage}
+\end{table}
