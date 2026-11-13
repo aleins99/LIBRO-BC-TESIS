@@ -1,18 +1,18 @@
 \centerline{\textbf{\large Verification of Ethereum Consensus and Transaction Inclusion}}
 \centerline{\textbf{\large with Zero Knowledge Applied to the Transfer of Digital Assets}}
 
-\vspace{2cm}
+\vspace{1cm}
 
 \rightline{Authors: Javier López - Alejandro Marín}
-\vspace{0.5cm}
+\vspace{0.3cm}
 \rightline{Advisor: PhD Marcos Villagra}
 
-\vspace{0.5cm}
+\vspace{0.3cm}
 
 \noindent
 \textbf{ABSTRACT}
 
-\vspace{0.5cm}
+\vspace{0.3cm}
 
 \noindent
 Cross-chain bridges allow assets to be transferred between different blockchains and are a
@@ -35,14 +35,13 @@ times faster and with less memory. The SP1 time does not include the Groth16 wra
 verification on Ethereum. Under the post-Osaka gas rules, each SP1 verification required about
 259,000 gas, between 17 and 18 times less than each of the three Noir proofs. The final Noir version of the
 bridge completed real transfers from Ethereum Sepolia to Optimism Sepolia, in about three and a
-half minutes each, and a transfer originated from a smart account was rejected, which confirms
-that the design only admits locks performed through a direct call. The system also includes a web interface with a comparative
-mode that shows how the classic scheme admits a fraudulent mint that the proof-based scheme
-rejects. The results indicate that
+half minutes each, and a lock performed from a smart account through an internal call did not
+allow minting, which confirms that the design only admits direct calls to the lock contract. A web interface with a comparative mode also shows that the classic
+scheme admits a fraudulent mint that the proof-based scheme rejects. The results indicate that
 neither tool dominates in every evaluated dimension and that the choice depends on whether the
 determining cost is proof generation or on-chain verification.
 
-\vspace{0.5cm}
+\vspace{0.3cm}
 
 \noindent
 \textbf{Keywords}: cross-chain bridges; zero-knowledge proofs (zk-SNARKs); Noir; UltraHonk; SP1;

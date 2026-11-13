@@ -157,8 +157,9 @@ Isthmus, una tarifa del operador~\cite{opfees}. La tarifa de datos incide de man
 en el puente, puesto que las pruebas se transmiten como datos de la transacción y su tamaño se
 refleja en lo que Optimism cobra por publicarlas en Ethereum. En este trabajo se reporta el gas de
 ejecución de la verificación y el tamaño de las pruebas y de sus entradas públicas, que determinan
-la tarifa de datos, mientras que el costo monetario, que exige desglosar las tarifas de las
-transacciones enviadas a la red, no se midió. Ambas magnitudes se complementan con el costo de generar las pruebas fuera de la
+la tarifa de datos. Las transacciones del puente enviadas a Optimism Sepolia permiten, además,
+separar ambas tarifas, aunque sus importes en ETH de una red de prueba no representan el costo
+en una red principal. Ambas magnitudes se complementan con el costo de generar las pruebas fuera de la
 cadena, según se detalla en el Capítulo~\ref{chp:zkbridge}.
 
 \subsection{Pruebas de fraude}
@@ -209,13 +210,14 @@ transacción del sistema que registra en el contrato \texttt{L1Block} el número
 tiempo y el hash del bloque de Ethereum que le sirve de origen~\cite{opspecspredeploys}. El
 puente desarrollado en este trabajo no utiliza este mecanismo de forma deliberada, puesto que el
 contrato \texttt{L1Block} solo existe en las cadenas construidas con el OP Stack y el objetivo es
-que el puente pueda desplegarse en cadenas que no mantienen una relación nativa con Ethereum. El
-estado de Ethereum se ancla, en cambio, en un contrato de cliente ligero que solo acepta un
-bloque cuando una prueba de conocimiento cero demuestra tres afirmaciones. La primera es que al
+que el puente pueda desplegarse en cadenas que no mantienen una relación nativa con Ethereum. Los
+bloques de Ethereum se anclan, en cambio, en un contrato de cliente ligero que solo acepta un
+bloque cuando una prueba de conocimiento cero demuestra tres afirmaciones, ninguna de las cuales
+establece que el bloque haya alcanzado la finalidad. La primera es que al
 menos dos tercios del comité de sincronización firmaron el encabezado
 (Sección~\ref{sec:eth_sync_committee}). La segunda es que las claves públicas empleadas
-corresponden al compromiso del comité registrado en el contrato. La tercera es que un conjunto de
-ramas de Merkle vincula dicho encabezado con el bloque de ejecución, conforme a la cadena de
+corresponden al compromiso del comité registrado en el contrato. La tercera es que una rama de
+Merkle vincula dicho encabezado con el bloque de ejecución, conforme a la cadena de
 compromisos de la Sección~\ref{sec:eth_cadena_verificacion}. Los detalles de este contrato se
 exponen en la Sección~\ref{sec:lock_and_mint}.
 
@@ -226,5 +228,6 @@ a las instrucciones que emite el compilador de Solidity. Las versiones recientes
 generan por defecto la instrucción \texttt{PUSH0}, introducida por la propuesta
 EIP-3855~\cite{eip3855}, de modo que en una cadena que no la admita los contratos deben
 compilarse para una versión anterior de la EVM, como la correspondiente a la actualización
-Paris. En este contexto, Optimism Sepolia cumple el papel de entorno de validación representativo
-de una cadena de destino compatible con la EVM y con costos de ejecución reducidos.
+Paris. Optimism Sepolia cumple, por lo tanto, el papel de cadena de destino de referencia,
+representativa de una cadena compatible con la EVM y con costos de ejecución reducidos, cuyas
+reglas de gas se reproducen en las mediciones del Capítulo~\ref{chp:zkbridge}.

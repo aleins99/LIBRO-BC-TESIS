@@ -38,7 +38,10 @@ las etapas del programa de inclusión no se midieron con la misma instrumentaci�
 cubre con la medición del gas de los contratos verificadores de ambas herramientas, de las
 transacciones completas de anclaje y de acuñación de Noir y de la lógica de anclaje de SP1
 (Sección~\ref{sec:metodologia_gas}). En SP1 no se midió una transacción completa de anclaje ni de
-acuñación. El segundo eje no se midió.
+acuñación. El segundo eje se obtuvo de los recibos de las transacciones de Noir en Optimism
+Sepolia, que informan por separado la ejecución en la capa 2 y la tarifa de datos de la capa 1,
+aunque su valor en ETH de una red de prueba no representa el de una red principal
+(Sección~\ref{sec:resultados_gas}).
 
 \subsection{Correspondencia entre etapas}
 \label{sec:metodologia_etapas}
@@ -102,7 +105,7 @@ intérprete de órdenes que lanzó cada proceso y no las del proceso medido, por
 Ambas implementaciones se midieron en el mismo servidor, una máquina virtual de Oracle Cloud
 Infrastructure de la forma \texttt{VM.Standard3.Flex} con sistema operativo Linux, configurada con
 7 OCPU y 90 GB de memoria. En esta forma, cada OCPU corresponde a un núcleo físico del procesador
-con dos hilos de ejecución~\cite{ocicomputeshapes}, de modo que el servidor disponía de 14 hilos y
+con dos hilos de ejecución~\cite{ocicomputeshapes}. El servidor disponía, así, de 14 hilos, y
 el porcentaje de uso del procesador podía alcanzar, como máximo, el 1400\,\%. El servidor contaba
 además con 150 GB de almacenamiento dedicados al área de intercambio, que el sistema operativo
 emplea como extensión de la memoria cuando un proceso supera la memoria física disponible. La
@@ -124,7 +127,7 @@ El costo de verificación se midió como el gas de ejecución de las transaccion
 pruebas en contratos desplegados en redes locales, y en el caso de Noir se contrastó, además, con
 las transacciones reales del puente en Optimism Sepolia (Sección~\ref{sec:resultados_gas}). Esta magnitud no depende del precio del gas
 (Sección~\ref{sec:eth_gas}) e incluye el costo intrínseco de la transacción, de 21\,000 unidades,
-y el de sus datos, de modo que cada cifra representa una transacción completa. Las mediciones se
+y el de sus datos, por lo que cada cifra representa una transacción completa. Las mediciones se
 realizaron en noviembre de 2026.
 
 El gas de una misma transacción depende de las reglas de la versión de la EVM que aplica la red. La
@@ -178,8 +181,8 @@ otra posición, alterada o dirigida a otra función o a otra dirección, de un e
 equivocados y de raíces falsas. En SP1, estos controles se
 repitieron sobre el verificador oficial ya desplegado en Optimism Sepolia, y se comprobó además en
 esa red el gas que cobran los contratos precompilados de la curva BN254, mediante llamadas que no
-modifican el estado. Ninguna medición envió transacciones a una red pública, por lo que no se
-obtuvo el costo monetario de las transacciones.
+modifican el estado. Las mediciones de SP1 no enviaron transacciones a una red pública, mientras
+que las de Noir se contrastaron con las transacciones del puente en Optimism Sepolia.
 
 \subsection{Métricas derivadas}
 \label{sec:metodologia_metricas}
@@ -268,8 +271,8 @@ Sección~\ref{sec:resultados_discusion}.
 		Gas de las transacciones de anclaje y de acuñación & Medido en transacciones completas, en
 		red local y en Optimism Sepolia. & Estimado por suma de componentes. & Con reservas. \\
 		\addlinespace
-		Costo monetario en Optimism Sepolia & Transacciones enviadas, sin desglose de la tarifa de
-		datos. & No medido. & No disponible. \\
+		Costo en Optimism Sepolia & Recibos de las transacciones, en ETH de una red de prueba. & No
+		medido. & No comparable. \\
 		\bottomrule
 	\end{tabular}
 \end{table}

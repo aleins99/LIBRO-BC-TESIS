@@ -122,8 +122,10 @@ el destinatario y el monto únicamente de los datos de la llamada
 implica que un bloqueo realizado a través de otro contrato no puede demostrarse. Esta limitación
 tiene consecuencias prácticas, porque las billeteras comienzan a convertir las cuentas de sus
 usuarios en cuentas inteligentes mediante la delegación de código que introduce la
-EIP-7702~\cite{eip7702}, con la que el bloqueo llega a \texttt{Sender} como una llamada interna.
-Las pruebas en Optimism Sepolia registraron un caso de este tipo (Sección~\ref{sec:resultados_gas}).
+EIP-7702~\cite{eip7702}, con la que, según cómo la billetera construya la transacción, el bloqueo
+puede llegar a \texttt{Sender} como una llamada interna. En ese caso el bloqueo se ejecuta con
+éxito en la cadena de origen, pero no satisface el enunciado del circuito y no permite acuñar. Las
+pruebas en Optimism Sepolia registraron un caso de este tipo (Sección~\ref{sec:resultados_gas}).
 
 La expresión de este enunciado como circuito presenta una dificultad que no aparece en el de
 consenso, porque la transacción, el recibo y los nodos de las ramas no tienen un tamaño fijado por

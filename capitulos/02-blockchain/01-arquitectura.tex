@@ -94,13 +94,13 @@ Los dos mecanismos dominantes son:
 	proporción a su participación bloqueada (\textit{stake}). Un comportamiento malicioso
 	detectable (como firmar dos bloques en conflicto para la misma posición) resulta en la
 	pérdida de parte o la totalidad de esa garantía (\textit{slashing}). A diferencia de PoW,
-	las variantes modernas de PoS —como la que adoptó Ethereum tras \textit{The Merge}— pueden
-	alcanzar \textbf{finalidad determinística}: una vez que un bloque acumula suficientes
+	las variantes modernas de PoS, como la que adoptó Ethereum tras \textit{The Merge}, pueden
+	alcanzar \textbf{finalidad determinística}. Una vez que un bloque acumula suficientes
 	atestiguaciones, revertirlo es no solo improbable sino que exige destruir económicamente a
-	los validadores responsables. Este mecanismo se retoma en la Sección~\ref{sec:ethereum}
-	junto con el comité de sincronización, que en Ethereum autentica los encabezados para los
-	clientes ligeros y constituye la raíz de confianza sobre la que se construye el puente
-	propuesto en este trabajo.
+	los validadores responsables. Este mecanismo de finalidad y el comité de sincronización, cuya
+	firma respalda los encabezados que siguen los clientes ligeros de Ethereum, se retoman en la
+	Sección~\ref{sec:ethereum}. La firma de ese comité, y no la finalidad, es la raíz de confianza
+	sobre la que se construye el puente propuesto en este trabajo.
 \end{itemize}
 
 \subsection{Roles de nodos y topología de red}

@@ -1,18 +1,18 @@
 \centerline{\textbf{\large Verificación de consenso e inclusión de transacciones en Ethereum}}
 \centerline{\textbf{\large con conocimiento cero aplicado a la transferencia de activos digitales}}
 
-\vspace{2cm}
+\vspace{1cm}
 
 \rightline{Autores: Javier López - Alejandro Marín}
-\vspace{0.5cm}
+\vspace{0.3cm}
 \rightline{Asesor: PhD Marcos Villagra}
 
-\vspace{0.5cm}
+\vspace{0.3cm}
 
 \noindent
 \textbf{RESUMEN}
 
-\vspace{0.5cm}
+\vspace{0.3cm}
 
 \noindent
 Los puentes entre cadenas (\textit{cross-chain bridges}) permiten transferir activos entre
@@ -36,15 +36,14 @@ cada prueba posterior unas 5,7 veces más rápido y con menos memoria. El tiempo
 envoltura Groth16 que exige la verificación en Ethereum. Con las reglas de gas posteriores a Osaka,
 cada verificación de SP1 requirió unas 259\,000 unidades de gas, entre 17 y 18 veces menos que cada
 una de las tres pruebas de Noir. La versión final del puente con Noir completó transferencias
-reales de Ethereum Sepolia a Optimism Sepolia, en unos tres minutos y medio cada una, y una
-transferencia originada en una cuenta inteligente fue rechazada, lo que confirma que el diseño
-solo admite bloqueos realizados mediante una llamada directa. El sistema incluye, además, una interfaz web con un modo comparativo que
-muestra cómo el esquema clásico admite una acuñación fraudulenta que el esquema con pruebas
-rechaza. Los resultados indican que ninguna herramienta domina en todas las
+reales de Ethereum Sepolia a Optimism Sepolia, en unos tres minutos y medio cada una, y un
+bloqueo realizado desde una cuenta inteligente mediante una llamada interna no permitió acuñar,
+lo que confirma que el diseño solo admite llamadas directas al contrato de bloqueo. Una interfaz web con un modo comparativo muestra, además, que el esquema
+clásico admite una acuñación fraudulenta que el esquema con pruebas rechaza. Los resultados indican que ninguna herramienta domina en todas las
 dimensiones evaluadas y que la elección depende de si el costo determinante es la generación de
 las pruebas o su verificación en la cadena.
 
-\vspace{0.5cm}
+\vspace{0.3cm}
 
 \noindent
 \textbf{Palabras Clave}: puentes entre cadenas (\textit{cross-chain bridges}); pruebas de

@@ -1,35 +1,32 @@
 \section{Contexto y antecedentes}
 
 Ethereum se ha consolidado como la plataforma de referencia para el despliegue de contratos
-inteligentes y constituye la base sobre la que se sostiene una porción significativa del
-ecosistema de finanzas descentralizadas~\cite{buterin2014ethereum}. Este crecimiento no se
-produjo de forma aislada, sino que estuvo acompañado por la proliferación de redes de
-\textit{Layer 2} y cadenas alternativas que replican o extienden su modelo de ejecución, cada
-una optimizada según distintos criterios de costo, rendimiento o descentralización. La
-fragmentación resultante de este ecosistema plantea la necesidad de que los activos digitales y
-los datos puedan trasladarse entre las distintas cadenas que lo componen, requisito que se
-conoce como interoperabilidad. Los puentes entre cadenas, o \textit{cross-chain bridges},
-constituyen la infraestructura que hace posible dicho traslado, de modo que la seguridad de
-estos mecanismos determina, en gran medida, la seguridad de los fondos que a través de ellos se
-transfieren.
+inteligentes y sostiene una porción significativa del ecosistema de finanzas
+descentralizadas~\cite{buterin2014ethereum}. Su crecimiento estuvo acompañado por la
+proliferación de redes de \textit{Layer 2} y de cadenas alternativas que replican o extienden su
+modelo de ejecución, cada una optimizada según distintos criterios de costo, rendimiento o
+descentralización. Esta fragmentación exige que los activos digitales y los datos puedan
+trasladarse entre cadenas, requisito que se conoce como interoperabilidad. Los puentes entre
+cadenas, o \textit{cross-chain bridges}, constituyen la infraestructura que hace posible ese
+traslado, por lo que su seguridad determina en gran medida la de los fondos que transfieren.
 
 Paralelamente al desarrollo de estas redes, las pruebas de conocimiento cero
 (\textit{Zero-Knowledge Proofs}) evolucionaron desde ser un objeto de estudio predominantemente
 teórico hasta convertirse en una herramienta de ingeniería aplicable a problemas concretos. Esta
 tecnología permite comprimir la verificación de un cómputo arbitrariamente extenso en una prueba
 sucinta, cuya validación puede realizarse en una fracción del tiempo y del costo que exigiría
-reejecutar dicho cómputo. Aplicada al contexto de Ethereum, esta propiedad habilita la
-verificación liviana, desde otra cadena, tanto del consenso alcanzado por los validadores, a
-través de la firma con que el comité de sincronización autentica los encabezados de bloque, como
-de la inclusión efectiva de una transacción particular dentro de un bloque, lo cual se logra
-mediante una prueba sobre su árbol de Merkle-Patricia. La combinación de ambas verificaciones,
-expresadas mediante pruebas de conocimiento cero, constituye el fundamento
-técnico sobre el que resulta posible construir un puente entre cadenas cuya seguridad no dependa
-de la honestidad de un intermediario, sino de una demostración matemáticamente verificable. En
-el presente trabajo, este fundamento se materializa mediante el diseño e implementación de un
-puente del tipo \textit{lock-and-mint}, en el cual el bloqueo de un activo en la cadena de
-origen habilita su acuñación equivalente en la cadena de destino únicamente cuando dicha prueba
-ha sido validada \textit{on-chain}.
+reejecutar dicho cómputo. Aplicada a Ethereum, esta propiedad permite verificar desde otra cadena
+tanto la firma con la que el comité de sincronización respalda un encabezado de bloque como la
+inclusión de una transacción particular en ese bloque, mediante una prueba sobre su árbol de
+Merkle-Patricia. La combinación de ambas verificaciones permite reducir la confianza depositada en
+el intermediario que opera un puente entre cadenas, al sustituir su autorización exclusiva por
+comprobaciones criptográficas. Este trabajo materializa esa idea en un puente del tipo
+\textit{lock-and-mint}, en el cual el bloqueo de un activo en la cadena de origen habilita su
+acuñación equivalente en la cadena de destino únicamente cuando las pruebas correspondientes han
+sido validadas \textit{on-chain}. Permanecen, no obstante, supuestos de confianza relacionados con
+la administración del contrato que registra el compromiso del comité de sincronización y con la
+finalidad del bloque anclado, ya que la firma del comité acredita la autenticidad del encabezado,
+pero no que el bloque haya alcanzado la finalidad.
 
 \section{Planteamiento del problema}
 
@@ -46,11 +43,10 @@ validadores externos sobre el cual se deposita confianza. Este diseño traslada 
 seguridad del propio protocolo hacia el comportamiento honesto de un conjunto reducido de
 actores, y esta delegación de confianza ha constituido, de manera sistemática, el punto de
 falla explotado en los incidentes de seguridad más costosos sufridos por puentes entre cadenas
-hasta la fecha~\cite{zhang2023bridgesok}. Persiste, en consecuencia, una tensión no resuelta
-entre dos objetivos igualmente necesarios: por un lado, alcanzar garantías criptográficas
-equivalentes a las del consenso de la cadena de origen y, por otro, mantener un costo de
-verificación \textit{on-chain}, tanto en gas como en tiempo de generación de la prueba, que
-resulte viable para un sistema de uso real.
+hasta la fecha~\cite{zhang2023bridgesok}. Persiste, por lo tanto, una tensión no resuelta entre
+alcanzar garantías criptográficas cercanas a las del consenso de la cadena de origen y mantener
+un costo, tanto en gas de verificación \textit{on-chain} como en tiempo de generación de la
+prueba, que resulte viable para un sistema de uso real.
 
 \section{Justificación}
 
@@ -71,13 +67,13 @@ lenguaje, la facilidad de desarrollo y depuración, y el rendimiento final del c
 resultante. Dado que ambas herramientas son de adopción reciente y se encuentran en desarrollo
 activo, no existe todavía evidencia empírica consolidada que permita fundamentar la elección de
 uno u otro paradigma para la implementación de un caso de uso concreto y computacionalmente
-exigente, como lo es la verificación de consenso e inclusión de transacciones en Ethereum. El
-presente trabajo se propone generar dicha evidencia mediante la implementación de un mismo
-problema en ambas tecnologías, bajo condiciones comparables, y la medición sistemática de su
-comportamiento. Ambas implementaciones se integran, además, dentro del mismo puente
-\textit{lock-and-mint}, de manera que la comparación entre Noir y SP1 no se limita a un
-ejercicio aislado de generación de pruebas, sino que se valida en el contexto de una
-transferencia real de activos digitales entre cadenas.
+exigente, como lo es la verificación de consenso e inclusión de transacciones en Ethereum. Este
+trabajo se propone generar dicha evidencia mediante la implementación de un mismo
+problema en ambas tecnologías, bajo condiciones tan comparables como lo permitan las
+herramientas, y la medición sistemática de su comportamiento. Ambas implementaciones se integran,
+además, dentro del mismo puente \textit{lock-and-mint}, de manera que la comparación entre Noir y
+SP1 no se limita a un ejercicio aislado de generación de pruebas, sino que considera también el
+costo de verificarlas en el contrato que autoriza la acuñación.
 
 \section{Objetivos}
 
@@ -106,20 +102,21 @@ práctica para la transferencia segura de activos digitales entre cadenas.
 
 \section{Hipótesis}
 
-El presente trabajo se orienta por la siguiente pregunta de investigación: ¿presenta el
+El trabajo se orienta por la siguiente pregunta de investigación: ¿presenta el
 paradigma de máquina virtual de conocimiento cero de propósito general, representado por SP1,
-ventajas significativas en términos de flexibilidad de desarrollo y de tiempos de ejecución
+ventajas relevantes en términos de flexibilidad de desarrollo y de tiempos de ejecución
 frente a un lenguaje de conocimiento cero de dominio específico como Noir, al implementar la
 verificación de consenso e inclusión de transacciones en Ethereum?
 
-A partir de esta pregunta se plantea la siguiente hipótesis. Al implementar la verificación de
-consenso e inclusión de transacciones de Ethereum, SP1 presenta ventajas significativas frente a
-Noir en la flexibilidad de desarrollo y en los tiempos de generación de las pruebas. Una ventaja se
-considera significativa en sentido práctico, es decir, cuando la diferencia observada equivale a
-varias veces el valor de la otra herramienta o modifica la viabilidad de una tarea de desarrollo u
-operación, y no en
-sentido estadístico, ya que cada medición se realizó una sola vez. El costo de verificación en la
-cadena de destino se mide y se compara de forma descriptiva, sin formar parte de la hipótesis.
+En correspondencia con esa pregunta, se plantea como hipótesis que SP1 presenta ventajas
+relevantes frente a Noir en la flexibilidad de desarrollo y en los tiempos de ejecución,
+entendidos como el tiempo necesario para obtener las pruebas a partir del programa, al
+implementar dicha verificación. Las ventajas se entienden como diferencias observables en las
+condiciones experimentales evaluadas, y no como significancia estadística, que las mediciones,
+ejecutadas una sola vez por etapa, no permiten establecer. El costo de verificación en la cadena de destino y el consumo de
+memoria, comprendidos en el objetivo general, se miden como dimensiones complementarias, sin una
+predicción previa sobre el sentido de sus resultados, y contribuyen junto con las anteriores a
+valorar la viabilidad práctica de cada herramienta.
 
 \section{Delimitación}
 
@@ -146,9 +143,9 @@ distintas de Ethereum.
 
 \section{Estructura del documento}
 
-El documento se organiza en cinco capítulos. El presente capítulo expone el contexto, el problema,
-la justificación, los objetivos, la hipótesis y la delimitación del trabajo. El
-Capítulo~\ref{chp:blockchain} presenta los fundamentos de \textit{blockchain} necesarios para el puente, entre ellos
+El documento se organiza en cinco capítulos. Este capítulo expone el contexto, el problema,
+la justificación, los objetivos, la hipótesis y la delimitación. El
+Capítulo~\ref{chp:blockchain} presenta los fundamentos de \textit{blockchain}, entre ellos
 la arquitectura general de estas redes, el modelo de ejecución y de consenso de Ethereum, las
 redes de capa 2 Aztec y Optimism y los puentes entre cadenas, con sus modelos, sus incidentes de
 seguridad y el estado del arte de los puentes basados en pruebas de conocimiento cero. El
@@ -158,5 +155,5 @@ Capítulo~\ref{chp:zkbridge} describe la arquitectura del puente, reseña zkBrid
 de diseño, presenta el diseño y la implementación de las pruebas en Noir y en SP1 y expone la
 metodología de comparación y sus resultados. El Capítulo~\ref{chp:conclusion} presenta las
 conclusiones respecto de cada objetivo, la verificación de la hipótesis y las líneas de trabajo
-futuro. El Apéndice reúne información complementaria sobre el entorno y los datos de las
-mediciones.
+futuro. El Apéndice detalla el entorno y los datos de las
+mediciones.\looseness=-1

@@ -182,9 +182,9 @@ etapas de generación del programa de inclusión de SP1 tampoco se midieron.
 \subsection{Costo en frío y amortización}
 \label{sec:resultados_amortizacion}
 
-La obtención de la primera prueba desde el código fuente demandó 92,3 minutos en Noir y
-17,9 minutos en SP1, de modo que, para una única prueba y en las condiciones medidas, SP1 resulta
-unas cinco veces más rápido.
+Con las etapas medidas, la obtención de la primera prueba demandó 92,3 minutos en Noir y
+17,9 minutos en SP1, cuyo ejecutable ya estaba compilado (Sección~\ref{sec:metodologia_validez}),
+por lo que, para una única prueba, SP1 resulta unas cinco veces más rápido.
 Esta comparación, sin embargo, no representa la operación del puente, en la que el mismo programa
 genera una prueba por cada anclaje. La Tabla~\ref{tab:resultados_amortizacion} separa los costos
 fijos de los costos por prueba según la Tabla~\ref{tab:metodologia_etapas}. El costo por prueba de
@@ -215,7 +215,7 @@ solo la generación de la prueba, la diferencia es de unas 12,2 veces.
 \end{table}
 
 Al sustituir estos valores en la Ecuación~\eqref{eq:punto_equilibrio} se obtiene
-$n^{*} \approx 6{,}3$, de modo que, a partir de la séptima prueba generada con un mismo programa,
+$n^{*} \approx 6{,}3$. A partir de la séptima prueba generada con un mismo programa,
 el tiempo total acumulado de Noir resulta inferior al de SP1. La
 Figura~\ref{fig:resultados_equilibrio} representa ambas rectas. Este punto corresponde al circuito
 de Noir medido en el servidor, por lo que el de los circuitos que integran el puente, que demuestran
@@ -357,7 +357,7 @@ costos. La diferencia entre el gas del anclaje y la suma de sus dos verificacion
 14\,811 unidades, y la verificación de inclusión equivale al 97,4\,\% del gas de la acuñación, cuya
 diferencia, de 128\,074 unidades, aproxima el costo de los controles y de la acuñación. El anclaje
 utiliza el 54,1\,\% del límite de 16\,777\,216 unidades por transacción que establece la propuesta
-EIP-7825~\cite{eip7825}, de modo que el diseño en dos pruebas cabe en una sola transacción. La comprobación del árbol de
+EIP-7825~\cite{eip7825}, por lo que el diseño en dos pruebas cabe en una sola transacción. La comprobación del árbol de
 transacciones, que se incorporó a la prueba de inclusión después de la del árbol de recibos,
 incrementó el gas de la acuñación en 59\,465 unidades, desde 4\,813\,693, principalmente por las
 32 entradas públicas que añade la raíz de transacciones.
@@ -410,7 +410,7 @@ comprobaron también los precios de la suma y de la multiplicación escalar sobr
 Fiat-Shamir, verifica el protocolo \textit{sumcheck}, cuyo número de rondas crece con el logaritmo
 del tamaño del circuito, y procesa cada entrada pública (Sección~\ref{sec:noir_impl_publicas}). Los
 circuitos del comité y de inclusión tienen el mismo tamaño, de $2^{22}$ filas, y pruebas de igual
-longitud, de modo que la diferencia de 255\,206 unidades entre sus verificaciones se atribuye a las
+longitud, por lo que la diferencia de 255\,206 unidades entre sus verificaciones se atribuye a las
 161 entradas públicas adicionales del segundo, a razón de unas 1\,585 unidades por entrada,
 incluido el costo de sus 32 bytes de datos. El circuito de emparejamiento duplica el tamaño del
 circuito del comité con seis entradas menos, y su verificación cuesta 88\,136 unidades más, lo que
@@ -458,7 +458,8 @@ tanto, unas 20 y 14 veces mayores, respectivamente, que los de una verificación
 diferencia se traslada a la tarifa de datos de la capa 1, que depende del tamaño comprimido de la
 transacción~\cite{opfees}. A la ejecución en la capa 2 y a la tarifa de datos se suma, desde la
 actualización Isthmus, una tarifa del operador~\cite{opfees}, de modo que el costo monetario de una
-transacción solo puede establecerse enviándola a la red. Ese costo no se midió en este trabajo.
+transacción solo puede establecerse enviándola a la red. Para SP1 ese costo no se midió, y para Noir
+se obtuvo de las transacciones en Optimism Sepolia que se describen a continuación.
 
 El flujo completo del puente de Noir se ejecutó, por último, entre Ethereum Sepolia y Optimism
 Sepolia, con la versión final de todos los circuitos desplegada en la cadena de destino. El
@@ -473,20 +474,37 @@ la confirmación de ambas transacciones. El gas de \lstinline|update| varió ent
 9\,082\,955 unidades y el de \lstinline|release|, entre 4\,856\,226 y 4\,873\,410, valores que
 difieren en menos del 0,4\,\% de los medidos en la red local con las reglas posteriores a Osaka
 (Tabla~\ref{tab:resultados_gas_tx}). Esa coincidencia confirma que la red local representa
-adecuadamente el costo de ejecución en la cadena de destino. La llamada a \lstinline|update|
-ocupó 23\,044 bytes de datos. La tarifa de datos de la capa 1 de esas transacciones no se midió
-por separado. El Apéndice~\ref{sec:apendice_testnet} detalla las transacciones.
+adecuadamente el costo de ejecución en la cadena de destino.
 
-Una cuarta transferencia fue rechazada, y su rechazo confirma en una red pública la limitación
-señalada en la Sección~\ref{sec:noir_impl_inclusion}. La billetera había convertido la cuenta de
-origen en una cuenta inteligente mediante la EIP-7702~\cite{eip7702}, de modo que la transacción
-se dirigió a un contrato intermedio que invocó \lstinline|lock| en una llamada interna, y
-\texttt{Sender} emitió el evento \texttt{Locked}. El bloque se ancló, ya que el anclaje no depende
+Los recibos de esas siete transacciones informan por separado el costo de la ejecución en la capa 2
+y la tarifa de datos de la capa 1. Cada anclaje costó en total unos $9{,}1 \times 10^{-6}$ ETH y
+cada acuñación unos $4{,}9 \times 10^{-6}$ ETH, importes que corresponden casi por completo a la
+ejecución en la capa 2 y, dentro de ella, a la propina de 0,001 gwei por unidad de gas que fijó el
+\textit{relayer}, ya que la tarifa base fue de 250 wei. La tarifa de la capa 1 osciló entre
+$16{,}8$ y $68{,}0 \times 10^{6}$ wei por anclaje y entre $9{,}2$ y $39{,}2 \times 10^{6}$ wei
+por acuñación, menos del 0,001\,\% del total, porque en Ethereum Sepolia el gas costaba entre 16 y
+18 wei y el de los \textit{blobs}, entre 1\,021 y 4\,590 wei. Estos importes se expresan en ETH de
+una red de prueba, que carece de valor, y dependen de precios que no pueden extrapolarse a una red
+principal, por lo que no se presentan como un costo monetario. Las magnitudes que se conservan en
+cualquier red son el gas de ejecución y el volumen de datos que se publica en la capa 1. Cada
+anclaje publicó 23\,044 bytes de datos de transacción, que comprenden las pruebas, sus entradas
+públicas y la codificación de la llamada, equivalentes a unas 304\,000 unidades de gas de la capa 1,
+y cada acuñación 16\,740 bytes, equivalentes a unas 158\,000. El costo en una red de producción
+resulta de multiplicar esas magnitudes por los precios vigentes en ella, cálculo que no se realizó.
+El Apéndice~\ref{sec:apendice_testnet} detalla las transacciones.
+
+Una cuarta transferencia no pudo completarse, lo que confirma en una red pública la limitación
+señalada en la Sección~\ref{sec:noir_impl_inclusion}. El bloqueo se ejecutó con éxito en la
+cadena de origen, pero no fue admisible para la acuñación. La billetera había convertido la cuenta de
+origen en una cuenta inteligente mediante la EIP-7702~\cite{eip7702} y dirigió la transacción a un
+contrato intermedio, que invocó \lstinline|lock| en una llamada interna, y \texttt{Sender} emitió
+el evento \texttt{Locked}. El bloque se ancló, ya que el anclaje no depende
 de la transacción, pero la prueba de inclusión no pudo generarse, porque la transacción, de
 1\,591 bytes, y su recibo, de 1\,675, superaban las cotas del circuito y, sobre todo, porque la
 transacción no se dirigía a \texttt{Sender}. No se acuñó ningún token, y los 10 GUA de esa
 operación quedaron en custodia en la cadena de origen, ya que el contrato no ofrece una función
-para devolverlos.
+para devolverlos. El rechazo se debe a la forma de la transacción y no a la cuenta en sí, puesto
+que una cuenta con código delegado puede seguir enviando una llamada directa a \texttt{Sender}.
 
 Antes de ese despliegue, el mismo flujo se había ejecutado con destino en una red local de Anvil
 con las reglas posteriores a Osaka, con un bloqueo de 42 GUA y la firma de 509 de los 512 miembros
@@ -515,7 +533,7 @@ puesto que el circuito compilado y la clave de verificación se conservan como a
 que genera las pruebas necesita entonces unos 19 GiB de memoria en el circuito medido, y los
 circuitos que integran el puente se probaron en un equipo de 18 GB, con un máximo de unos 12,9 GB
 en la prueba de emparejamiento. En SP1, el pico corresponde a
-cada generación de prueba, de modo que el equipo del \textit{relayer} debe disponer en todo momento
+cada generación de prueba, por lo que el equipo del \textit{relayer} debe disponer en todo momento
 de una memoria del orden de 90 GiB. Este requisito incide directamente en el costo de la máquina en
 la nube que opera el puente.
 
@@ -574,6 +592,6 @@ configuración evaluada y no una propiedad general de ambas herramientas. Las me
 generación se limitan al programa de consenso, al procesador como único recurso de cómputo y a una
 sola ejecución por etapa, y en Noir corresponden a un circuito que demuestra un enunciado menor que
 el de SP1. Las de verificación excluyen las transacciones completas de anclaje y de acuñación de
-SP1, la verificación de su prueba de inclusión y el costo monetario de las transacciones. El
+SP1, la verificación de su prueba de inclusión y el costo monetario en una red principal. El
 Capítulo~\ref{chp:conclusion} retoma estos resultados para responder la pregunta de investigación
 y verificar la hipótesis.
