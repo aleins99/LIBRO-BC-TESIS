@@ -35,8 +35,9 @@ times faster and with less memory. The SP1 time does not include the Groth16 wra
 verification on Ethereum. Under the post-Osaka gas rules, each SP1 verification required about
 259,000 gas, between 17 and 18 times less than each of the three Noir proofs. The final Noir version of the
 bridge completed real transfers from Ethereum Sepolia to Optimism Sepolia, in about three and a
-half minutes each, and a lock performed from a smart account through an internal call did not
-allow minting, which confirms that the design only admits direct calls to the lock contract. A web interface with a comparative mode also shows that the classic
+half minutes each. A lock performed from a smart account through an internal call did not result
+in minting because the transaction did not directly target the lock contract and, like its
+receipt, exceeded the maximum size supported by the inclusion circuit. A web interface with a comparative mode also shows that the classic
 scheme admits a fraudulent mint that the proof-based scheme rejects. The results indicate that
 neither tool dominates in every evaluated dimension and that the choice depends on whether the
 determining cost is proof generation or on-chain verification.
