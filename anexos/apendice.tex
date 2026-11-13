@@ -151,9 +151,7 @@ verificador desplegado en Optimism Sepolia. La prueba alterada, obtenida modific
 de la prueba, revirtió con el error \texttt{ProofInvalid()}, de selector \texttt{0x7fcdd1f4}, en
 ambas redes. En Optimism Sepolia, el verificador desplegado devolvió una estimación de 259\,224
 unidades de gas para la prueba válida, y la repetición de estos controles en el bloque
-51\,361\,939 arrojó la misma estimación y confirmó los precios de los precompilados. Las
-mediciones de \texttt{updateHeader} emplearon los valores públicos de una actualización real de
-Ethereum Sepolia con 509 de 512 firmantes. Su código no es idéntico al compilado localmente, por lo que
+51\,361\,939 arrojó la misma estimación y confirmó los precios de los precompilados. Su código no es idéntico al compilado localmente, por lo que
 esta cifra no se combina con las de la tabla.
 
 \begin{table}[htbp]
@@ -168,11 +166,11 @@ esta cifra no se combina con las de la tabla.
 		\midrule
 		\texttt{verifyProof} con la prueba Groth16 válida & 259\,608 & 253\,395 & 1\,156 \\
 		Hash de los valores públicos de la prueba empleada & 29\,072 & 29\,072 & 676 \\
-		Hash de valores públicos de 320 bytes, versión anterior del programa & 25\,825 & 25\,825 & 388 \\
-		\texttt{updateHeader} con verificador simulado, primer anclaje & 85\,340 & 85\,340 & No informado \\
-		\texttt{updateHeader} con verificador simulado, anclaje ordinario & 68\,240 & 68\,240 & No informado \\
+		Hash de los valores públicos del programa de consenso & 25\,825 & 25\,825 & 388 \\
+		\texttt{updateHeader} con verificador simulado, primer anclaje & 84\,036 & 84\,036 & 452 \\
+		\texttt{updateHeader} con verificador simulado, anclaje ordinario & 66\,936 & 66\,936 & 452 \\
 		\texttt{setCommittee}, rotación del compromiso & 30\,127 & 30\,127 & 36 \\
-		\texttt{updateHeader} con verificador simulado, tras la rotación & 68\,240 & 68\,240 & No informado \\
+		\texttt{updateHeader} con verificador simulado, tras la rotación & 66\,936 & 66\,936 & 452 \\
 		\bottomrule
 	\end{tabular}
 \end{table}

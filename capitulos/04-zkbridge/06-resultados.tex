@@ -314,7 +314,7 @@ límite de 24\,576 bytes que la propuesta EIP-170 impone al código de un contra
 		datos de la transacción. La cifra de SP1 corresponde a \texttt{eth\_estimateGas} con las
 		reglas de Cancun, válidas también después de Osaka para este verificador
 		(Sección~\ref{sec:metodologia_gas}). La prueba de SP1 pertenece a otro programa, y los
-		valores públicos del programa de consenso ocupan 416 bytes.
+		valores públicos del programa de consenso ocupan 320 bytes.
 	\end{minipage}
 \end{table}
 
@@ -432,26 +432,24 @@ el de inclusión representa cada byte en un elemento.
 
 En SP1, el costo de la verificación no depende del programa probado, salvo a través de los valores
 públicos. La prueba empleada en la medición acompaña valores públicos de 577 bytes, frente a los
-416 de la versión actual del programa de consenso. El cálculo aislado del hash de los 577 bytes,
-ejecutado como una transacción completa, requirió 29\,072 unidades de gas, y el de una secuencia de
-320 bytes, correspondiente a una versión anterior del programa, 25\,825, es decir, 1\,384 y
+320 del programa de consenso. El cálculo aislado del hash de cada secuencia, ejecutado como una
+transacción completa, requirió 29\,072 y 25\,825 unidades de gas, respectivamente, y 1\,384 y
 1\,221 unidades una vez descontados el costo intrínseco y el de los datos de la transacción. La
-diferencia entre ambas secuencias es de 3\,247 unidades, equivalente al 1,3\,\% de la verificación
-medida. Como los 416 bytes del programa actual se sitúan entre ambos tamaños, la diferencia
-atribuible a sus valores públicos es aún menor, por lo que el valor de la Tabla~\ref{tab:resultados_gas}
+diferencia atribuible a los valores públicos es, en consecuencia, de 3\,247 unidades, equivalente
+al 1,3\,\% de la verificación medida, por lo que el valor de la Tabla~\ref{tab:resultados_gas}
 representa con una aproximación suficiente el costo de verificar una prueba del programa de
 consenso.
 
 La lógica de \texttt{BeaconLightClient} de SP1, medida con el verificador simulado, requirió
-85\,340 unidades de gas en el primer anclaje y 68\,240 en los anclajes siguientes. La diferencia,
+84\,036 unidades de gas en el primer anclaje y 66\,936 en los anclajes siguientes. La diferencia,
 de 17\,100 unidades, corresponde a la escritura del último \textit{slot} registrado, que cuesta
 22\,100 unidades cuando se realiza por primera vez y 5\,000 cuando actualiza un valor existente.
 El registro del hash del bloque anclado exige en ambos casos una escritura nueva, de 22\,100
 unidades. La rotación del compromiso del comité, que el propietario realiza mediante una
 transacción separada (Sección~\ref{sec:puente_aceptacion}), requirió 30\,127 unidades. Si al gas
 del verificador se suma el de la lógica del contrato y se descuenta una vez el costo intrínseco de
-la transacción, se obtienen unas 306\,848 unidades para un anclaje ordinario, 323\,948 para el
-primero y 336\,975 para un anclaje acompañado de la rotación del comité. Estas cifras son sumas de componentes medidos y no la medición de una transacción
+la transacción, se obtienen unas 305\,544 unidades para un anclaje ordinario y 322\,644 para el
+primero. Estas cifras son sumas de componentes medidos y no la medición de una transacción
 completa, puesto que conservan el costo de los datos de ambas llamadas y el de la llamada al
 verificador simulado. Con esa salvedad, el anclaje de Noir consume unas 30 veces el gas estimado
 para el anclaje de SP1. La verificación de la prueba de inclusión de SP1 no se midió. Como su

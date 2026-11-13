@@ -163,8 +163,8 @@ probado (Sección~\ref{sec:snarks_starks}) y solo varía con el tamaño de los v
 se incorporan mediante su hash y forman parte de los datos de la transacción. Esa variación se
 cuantifica en la Sección~\ref{sec:resultados_gas}. La lógica de \texttt{BeaconLightClient} se
 midió por separado, con un verificador simulado que acepta cualquier prueba y con los valores
-públicos de 416 bytes de la versión actual del programa de consenso, obtenidos de una actualización
-real de Ethereum Sepolia con 509 de los 512 miembros del comité como firmantes.
+públicos de 320 bytes del programa de consenso, obtenidos de una ejecución sobre un comité
+sintético de un solo miembro.
 
 Ambas mediciones incluyeron controles de validez. En SP1, la prueba válida fue aceptada y la misma
 prueba con un byte modificado fue rechazada mediante la reversión de la llamada. En Noir, las

@@ -125,9 +125,15 @@ de ambas herramientas a Optimism Sepolia permitiría, además, establecer su cos
 con la tarifa de datos de la capa 1 y la tarifa del operador.
 
 La segunda línea consiste en reducir los supuestos de confianza que conserva el puente. La
-verificación de la finalidad, mediante la rama que vincula el encabezado finalizado con el
-encabezado atestiguado (Sección~\ref{sec:eth_cadena_verificacion}), impediría anclar bloques que no
-lleguen a finalizarse. La verificación de la transición del comité mediante una prueba, en lugar
+primera es la verificación de la finalidad. En ambas implementaciones, el programa de consenso
+demuestra que el comité firmó el encabezado que contiene el bloque de ejecución, pero no que ese
+bloque esté finalizado, de modo que un bloque que la cadena de origen descarte podría originar una
+acuñación sin respaldo. El programa debería recibir el encabezado finalizado y la rama SSZ que lo
+vincula con el atestiguado (Sección~\ref{sec:eth_cadena_verificacion}), verificarla y anclar el
+bloque de ejecución del encabezado finalizado, lo que exigiría exponer su \textit{slot} entre los
+valores públicos y añadiría una espera de cerca de 12,8 minutos antes de cada acuñación
+(Sección~\ref{sec:eth_consenso}), con un efecto sobre el costo de las pruebas que debería medirse.
+La verificación de la transición del comité mediante una prueba, en lugar
 de su actualización por el propietario, eliminaría la dependencia de ese actor, como ocurre en los
 clientes ligeros basados en pruebas descritos en la Sección~\ref{sec:puentes_estado_arte}.
 
