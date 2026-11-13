@@ -35,11 +35,11 @@ principal del registro~\cite{xie2022zkbridge}.
 En su tesis de grado en la FP-UNA, Figueredo Camé y Riquelme Godoy reseñaron la propuesta de
 Berkeley y construyeron su prototipo a partir de una implementación abierta de
 zkBridge~\cite{figueredo2026zkbridge}. El prototipo actual presenta una
-separación semejante, en la que \texttt{BeaconLightClient} registra el hash del bloque de ejecución
-certificado por la prueba de consenso y \texttt{ZKReceiver} comprueba la inclusión y la ejecución
-exitosa de la transacción antes de acuñar (Sección~\ref{sec:puente_arquitectura}). La ruta \lstinline|mintRemote| ilustra esa
-división, ya que el receptor aprovecha un anclaje previo sin que se vuelva a presentar la prueba que
-lo estableció. Se trata de una semejanza de diseño y no de una equivalencia de garantías, puesto que
+separación semejante, en la que \texttt{BeaconLightClient} registra el bloque de ejecución
+certificado por la prueba de consenso y el contrato receptor comprueba la inclusión y la ejecución
+exitosa de la transacción antes de acuñar (Sección~\ref{sec:puente_arquitectura}). El receptor
+puede, además, aprovechar un anclaje previo sin que se vuelva a presentar la prueba que lo
+estableció, lo que ilustra esa división. Se trata de una semejanza de diseño y no de una equivalencia de garantías, puesto que
 el prototipo no encadena cada encabezado con su predecesor, recibe el compromiso del comité de su
 propietario y puede anclar bloques no finalizados (Sección~\ref{sec:puente_aceptacion}). La sección siguiente aborda la expresión en Noir de los
 enunciados de consenso y de inclusión.

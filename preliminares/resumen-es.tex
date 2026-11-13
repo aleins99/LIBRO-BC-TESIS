@@ -3,7 +3,7 @@
 
 \vspace{2cm}
 
-\rightline{Autor: Javier López - Alejandro Marín}
+\rightline{Autores: Javier López - Alejandro Marín}
 \vspace{0.5cm}
 \rightline{Asesor: PhD Marcos Villagra}
 
@@ -15,32 +15,34 @@
 \vspace{0.5cm}
 
 \noindent
-Los puentes entre cadenas o popularmente conocidos como \textit{cross-chain bridges}, permiten 
-transferir activos entre distintas \textit{blockchains} y constituyen una pieza central de la 
-interoperabilidad. La mayoría se apoya en el patrón \textit{lock-and-mint} operado por un 
-\textit{relayer} de confianza, un actor que tras observar el bloqueo de fondos en la cadena 
-de origen acuña el equivalente en la cadena de destino. Como toda la seguridad recae en ese 
-operador, que podría acuñar de forma fraudulenta, los puentes se han vuelto uno de los blancos 
-más explotados del ecosistema. 
-En este trabajo se diseña e implementa un puente de confianza reducida
-(\textit{trust-minimized}) que sustituye esa confianza por verificación criptográfica. El
-contrato de destino solo acuña cuando valida \textit{on-chain} una prueba de conocimiento cero
-(\textit{zero-knowledge}). La prueba acredita que la transacción de bloqueo fue incluida en el
-bloque anclado y que el recibo de esa misma posición registra una ejecución exitosa. El receptor
-verifica que la transacción invoca \texttt{lock} en \texttt{Sender} y obtiene de los datos de la
-llamada el destinatario y el monto que se acuñará. Estas comprobaciones no acreditan la finalidad
-del bloque. La lógica de verificación se desarrolló en Noir y, de forma equivalente,
-en Rust para la máquina virtual de conocimiento cero SP1, con verificadores \textit{on-chain} en
-Solidity, y ambas implementaciones se comparan empíricamente en rendimiento, costo de
-verificación y viabilidad práctica. Un \textit{relayer} \textit{off-chain} construye las pruebas
-de consenso y de inclusión de cada operación y las remite al contrato de destino, donde deja de
-ser un acuñador de confianza y pasa a ser un probador sin permisos, ya que cualquiera con
-pruebas válidas puede liberar los fondos y nadie puede acuñar sin ellas. De manera complementaria se diseña la
-validación de la firma del comité de sincronización (\textit{sync committee}) de Ethereum como
-raíz de confianza sobre la finalidad del bloque. La solución se validó sobre redes de prueba reales, con Ethereum
-Sepolia como cadena de origen y Optimism Sepolia como destino. Adicionalmente incluye una interfaz web y un
-modo comparativo que evidencia de forma experimental cómo el esquema clásico admite la
-acuñación fraudulenta mientras que el esquema con verificación de conocimiento cero la rechaza.
+Los puentes entre cadenas (\textit{cross-chain bridges}) permiten transferir activos entre
+distintas \textit{blockchains} y constituyen una pieza central de la interoperabilidad. La mayoría
+se apoya en el patrón \textit{lock-and-mint} operado por un \textit{relayer} de confianza, que tras
+observar el bloqueo de fondos en la cadena de origen acuña el equivalente en la cadena de destino.
+Como la seguridad recae por completo en ese operador, los puentes se han convertido en uno de los
+componentes más atacados del ecosistema. En este trabajo se diseña e implementa un puente de
+confianza reducida en el que el contrato de destino solo acuña tras verificar \textit{on-chain}
+pruebas de conocimiento cero. La prueba de consenso establece que más de dos tercios del comité
+de sincronización de Ethereum firmaron el encabezado del que se deriva el bloque de ejecución, y la
+prueba de inclusión, que la transacción de bloqueo pertenece a ese bloque, invoca directamente al
+contrato de bloqueo y que su recibo registra una ejecución exitosa. El puente no verifica la
+finalidad del bloque, y el compromiso de cada comité lo registra el propietario del contrato. El
+\textit{relayer} deja de ser un acuñador de confianza y pasa a ser un probador sin permisos. La
+lógica de verificación se implementó en Noir y en Rust para la máquina virtual SP1, con
+verificadores en Solidity, y ambas implementaciones se compararon empíricamente. En las
+condiciones medidas, con una versión anterior del circuito de consenso de Noir que demuestra un
+enunciado menor, SP1 obtuvo la primera prueba unas cinco veces más rápido, mientras que Noir generó
+cada prueba posterior unas 5,7 veces más rápido y con menos memoria. El tiempo de SP1 no incluye la
+envoltura Groth16 que exige la verificación en Ethereum. Con las reglas de gas posteriores a Osaka,
+cada verificación de SP1 requirió unas 259\,000 unidades de gas, entre 17 y 18 veces menos que cada
+una de las tres pruebas de Noir. La versión final del puente con Noir completó transferencias
+reales de Ethereum Sepolia a Optimism Sepolia, en unos tres minutos y medio cada una, y una
+transferencia originada en una cuenta inteligente fue rechazada, lo que confirma que el diseño
+solo admite bloqueos realizados mediante una llamada directa. El sistema incluye, además, una interfaz web con un modo comparativo que
+muestra cómo el esquema clásico admite una acuñación fraudulenta que el esquema con pruebas
+rechaza. Los resultados indican que ninguna herramienta domina en todas las
+dimensiones evaluadas y que la elección depende de si el costo determinante es la generación de
+las pruebas o su verificación en la cadena.
 
 \vspace{0.5cm}
 

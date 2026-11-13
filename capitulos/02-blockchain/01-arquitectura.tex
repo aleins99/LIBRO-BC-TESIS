@@ -97,9 +97,10 @@ Los dos mecanismos dominantes son:
 	las variantes modernas de PoS —como la que adoptó Ethereum tras \textit{The Merge}— pueden
 	alcanzar \textbf{finalidad determinística}: una vez que un bloque acumula suficientes
 	atestiguaciones, revertirlo es no solo improbable sino que exige destruir económicamente a
-	los validadores responsables. Este mecanismo de finalidad, y el comité que la certifica en
-	Ethereum, se retoma en la Sección~\ref{sec:ethereum} y es la raíz de confianza sobre la que
-	se construye el puente propuesto en este trabajo.
+	los validadores responsables. Este mecanismo se retoma en la Sección~\ref{sec:ethereum}
+	junto con el comité de sincronización, que en Ethereum autentica los encabezados para los
+	clientes ligeros y constituye la raíz de confianza sobre la que se construye el puente
+	propuesto en este trabajo.
 \end{itemize}
 
 \subsection{Roles de nodos y topología de red}
@@ -119,9 +120,9 @@ mismos recursos:
 	atestiguando en PoS).
 
 	\item \textbf{Clientes ligeros} (\textit{light clients}): no almacenan la cadena completa ni
-	reejecutan todas las transacciones; en su lugar, confían en los encabezados de bloque —en
-	particular en su raíz de Merkle y, en redes PoS, en la firma del comité que certifica su
-	finalidad— para verificar de forma eficiente si una transacción específica fue incluida,
+	reejecutan todas las transacciones, sino que confían en los encabezados de bloque, en
+	particular en su raíz de Merkle y, en redes PoS, en la firma de un comité que los autentica,
+	para verificar de forma eficiente si una transacción específica fue incluida,
 	mediante una prueba de inclusión como la descrita en la Sección~\ref{sec:merkle}. Este es
 	precisamente el modelo de confianza que adopta el puente diseñado en este trabajo, cuyos
 	contratos en la cadena de destino no reejecutan la cadena de origen, sino que verifican pruebas

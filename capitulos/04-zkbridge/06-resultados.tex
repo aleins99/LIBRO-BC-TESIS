@@ -130,8 +130,11 @@ versión para WebAssembly no pudo generar la prueba de inclusión por el límite
 memoria física y el área de intercambio. La generación de las pruebas demandó unos 23 segundos
 para el circuito del comité y unos 75 para el de emparejamiento, es decir, unos 98 segundos para
 el enunciado de consenso completo, y unos 23 segundos y 6,7 GB para la prueba de inclusión, cuyo
-circuito tiene 4\,105\,601 compuertas. La memoria máxima de la generación de las pruebas de
-consenso no se midió y, como el equipo es distinto, estas cifras no se comparan con las del servidor. Las
+circuito tiene 4\,105\,601 compuertas. La generación de la prueba de emparejamiento alcanzó unos
+12,9 GB de memoria, y la del circuito del comité no se midió. Durante las transferencias en
+Optimism Sepolia, con otros procesos en ejecución en el mismo equipo, las pruebas del comité y de
+emparejamiento demandaron entre 35 y 41 segundos y entre 111 y 116 segundos, respectivamente. Como
+el equipo es distinto, estas cifras no se comparan con las del servidor. Las
 etapas de generación del programa de inclusión de SP1 tampoco se midieron.
 
 \begin{figure}[htbp]
@@ -180,12 +183,15 @@ etapas de generación del programa de inclusión de SP1 tampoco se midieron.
 \label{sec:resultados_amortizacion}
 
 La obtención de la primera prueba desde el código fuente demandó 92,3 minutos en Noir y
-17,9 minutos en SP1, de modo que, para una única prueba, SP1 resulta unas cinco veces más rápido.
+17,9 minutos en SP1, de modo que, para una única prueba y en las condiciones medidas, SP1 resulta
+unas cinco veces más rápido.
 Esta comparación, sin embargo, no representa la operación del puente, en la que el mismo programa
 genera una prueba por cada anclaje. La Tabla~\ref{tab:resultados_amortizacion} separa los costos
 fijos de los costos por prueba según la Tabla~\ref{tab:metodologia_etapas}. El costo por prueba de
 Noir, formado por el testigo y la prueba, asciende a 179,7 segundos, mientras que el de SP1, formado
-por la etapa de prueba, asciende a 1029,5 segundos, es decir, unas 5,7 veces más. Si se considera
+por la etapa de prueba, asciende a 1029,5 segundos, es decir, unas 5,7 veces más. Ambas razones
+corresponden a la versión anterior del circuito de consenso de Noir y a la prueba de núcleo de SP1,
+sin la envoltura Groth16 (Sección~\ref{sec:metodologia_validez}). Si se considera
 solo la generación de la prueba, la diferencia es de unas 12,2 veces.
 
 \begin{table}[htbp]
@@ -255,33 +261,19 @@ etapa de ejecución, que no forma parte del costo por prueba.
 \label{sec:resultados_gas}
 
 En la versión de Noir que integra el puente, el enunciado de consenso se verifica mediante dos
-pruebas, puesto que el circuito completo no pudo compilarse en el equipo disponible
-(Sección~\ref{sec:resultados_etapas}). El primer circuito, denominado en lo sucesivo circuito del
-comité, comprueba que las claves recibidas corresponden al compromiso del comité registrado, que
-participan al menos dos tercios de sus miembros, suma las claves de los participantes, deriva la
-raíz de firma del encabezado y la transforma en un punto de $\mathbb{G}_2$, y vincula el hash del
-bloque de ejecución con el encabezado y las raíces de transacciones y de recibos con ese bloque. El segundo, denominado
-circuito de emparejamiento, verifica la Ecuación~\eqref{eq:bls_agregada}. Ambos exponen un mismo
-valor público de enlace, calculado mediante la función de hash Poseidon2 sobre la clave agregada,
-el punto del mensaje y la firma, y \texttt{BeaconLightClient} exige que ese valor coincida en las
-dos pruebas, de modo que una prueba de emparejamiento de otra firma no puede combinarse con la
-prueba del comité. Lo que conecta el consenso con la inclusión es el par formado por la raíz de
-transacciones y la raíz de recibos, que el circuito del comité expone y que \texttt{BeaconLightClient}
-registra de forma conjunta, mediante el hash Keccak de su concatenación. El contrato de acuñación
-exige que ese par exacto esté registrado antes de aceptar la prueba de inclusión, de modo que no
-es posible combinar la transacción de un bloque con el recibo de otro. La prueba de inclusión
-demuestra, para una misma posición del mismo bloque, que la transacción figura en el árbol de
-transacciones e invoca directamente \lstinline|lock| sobre \texttt{Sender}, que su recibo figura
-en el árbol de recibos con una ejecución exitosa y que ese recibo contiene el evento
-\texttt{Locked}, cuyos identificador, destinatario y monto deben coincidir con los de la
-transacción.
+pruebas, la del circuito del comité y la del circuito de emparejamiento, enlazadas por un valor
+público común, y la inclusión mediante una tercera, que el contrato receptor solo acepta si el par
+de raíces de transacciones y de recibos que emplea fue registrado por \texttt{BeaconLightClient}
+(Sección~\ref{sec:noir_impl}). La prueba de inclusión de Noir establece algo más que la de SP1,
+ya que comprueba también el evento \texttt{Locked} del recibo
+(Sección~\ref{sec:puente_variantes}), aunque esa comprobación no altera las garantías del puente.
 
 La Tabla~\ref{tab:resultados_gas} reúne el gas de la verificación de cada prueba con las reglas
 posteriores a Osaka y el tamaño de los datos que la acompañan, y la Figura~\ref{fig:resultados_gas}
 compara el gas. Cada verificación de Noir requirió entre 4,49 y 4,75 millones de unidades de gas,
 mientras que la verificación de una prueba Groth16 de SP1 requirió 259\,608 unidades según la
 estimación, y la transacción correspondiente consumió 253\,395 según su recibo, ya que la
-estimación puede superar el consumo efectivo. Cada verificación resulta, en consecuencia, entre
+estimación puede superar el consumo efectivo. Cada verificación resulta, así, entre
 17,3 y 18,3 veces más costosa en Noir que en SP1, y las dos verificaciones que exige el enunciado
 de consenso en Noir suman 9\,067\,892 unidades, unas 35 veces el costo de la verificación de SP1. El
 código de los tres verificadores de Noir ocupa 17\,532, 17\,155 y 17\,407 bytes, por debajo del
@@ -403,7 +395,7 @@ Las reglas de Osaka elevaron el gas de las transacciones de Noir entre un 41,0 y
 respecto de las de Prague, como consecuencia del incremento del costo del precompilado MODEXP que
 introdujo la propuesta EIP-7883~\cite{eip7883} y que el verificador de UltraHonk emplea. El
 verificador de SP1 no emplea ese precompilado (Sección~\ref{sec:metodologia_gas}), por lo que su
-costo no varió. La ventaja de SP1 en la verificación aumentó, en consecuencia, con la actualización.
+costo no varió. La actualización aumentó, por ello, la ventaja de SP1 en la verificación.
 Con las reglas de Prague, la verificación de la prueba de inclusión de Noir costaba unas 12,8 veces
 la de SP1, y con las posteriores a Osaka, unas 18,3 veces.
 
@@ -435,7 +427,7 @@ públicos. La prueba empleada en la medición acompaña valores públicos de 577
 320 del programa de consenso. El cálculo aislado del hash de cada secuencia, ejecutado como una
 transacción completa, requirió 29\,072 y 25\,825 unidades de gas, respectivamente, y 1\,384 y
 1\,221 unidades una vez descontados el costo intrínseco y el de los datos de la transacción. La
-diferencia atribuible a los valores públicos es, en consecuencia, de 3\,247 unidades, equivalente
+diferencia atribuible a los valores públicos es de 3\,247 unidades, equivalente
 al 1,3\,\% de la verificación medida, por lo que el valor de la Tabla~\ref{tab:resultados_gas}
 representa con una aproximación suficiente el costo de verificar una prueba del programa de
 consenso.
@@ -468,14 +460,37 @@ transacción~\cite{opfees}. A la ejecución en la capa 2 y a la tarifa de datos 
 actualización Isthmus, una tarifa del operador~\cite{opfees}, de modo que el costo monetario de una
 transacción solo puede establecerse enviándola a la red. Ese costo no se midió en este trabajo.
 
-El flujo completo del puente de Noir se ejecutó, por último, de punta a punta. Con la versión final de
-todos los circuitos, se bloquearon 42 GUA en Ethereum Sepolia, mediante una transacción de
-tipo EIP-1559 en la posición 97 del bloque 12\,122\,052, y la prueba de consenso se generó a
-partir de la firma del comité en el \textit{slot} 11\,565\,990, con la participación de 509 de sus 512
-miembros. La cadena de destino fue una red local de Anvil con las reglas posteriores a Osaka, en la
-que el propietario registró el compromiso del comité del período 1411 mediante
-\lstinline|setCommittee|. Ambas transacciones fueron aceptadas y el destinatario recibió los
-42 GUA. Las 33 pruebas automatizadas de los contratos y las 30 del circuito de inclusión
+El flujo completo del puente de Noir se ejecutó, por último, entre Ethereum Sepolia y Optimism
+Sepolia, con la versión final de todos los circuitos desplegada en la cadena de destino. El
+13 de noviembre de 2026 se completaron tres transferencias, por un total de 21 GUA, dos de ellas
+iniciadas desde la interfaz web con una billetera MetaMask y una mediante un script. Cada bloque
+que contenía un bloqueo se ancló con su propia transacción de \lstinline|update|, y los cuatro
+anclajes, todos del período 1412 del comité, cuyo compromiso el propietario registró una sola vez,
+fueron aceptados. En los dos primeros firmaron 504 de los 512 miembros. El tiempo transcurrido
+entre la transacción de bloqueo y la de acuñación fue de entre 3 minutos 22 segundos y 3 minutos
+36 segundos, que incluyen la espera de la firma del comité, la generación de las tres pruebas y
+la confirmación de ambas transacciones. El gas de \lstinline|update| varió entre 9\,082\,631 y
+9\,082\,955 unidades y el de \lstinline|release|, entre 4\,856\,226 y 4\,873\,410, valores que
+difieren en menos del 0,4\,\% de los medidos en la red local con las reglas posteriores a Osaka
+(Tabla~\ref{tab:resultados_gas_tx}). Esa coincidencia confirma que la red local representa
+adecuadamente el costo de ejecución en la cadena de destino. La llamada a \lstinline|update|
+ocupó 23\,044 bytes de datos. La tarifa de datos de la capa 1 de esas transacciones no se midió
+por separado. El Apéndice~\ref{sec:apendice_testnet} detalla las transacciones.
+
+Una cuarta transferencia fue rechazada, y su rechazo confirma en una red pública la limitación
+señalada en la Sección~\ref{sec:noir_impl_inclusion}. La billetera había convertido la cuenta de
+origen en una cuenta inteligente mediante la EIP-7702~\cite{eip7702}, de modo que la transacción
+se dirigió a un contrato intermedio que invocó \lstinline|lock| en una llamada interna, y
+\texttt{Sender} emitió el evento \texttt{Locked}. El bloque se ancló, ya que el anclaje no depende
+de la transacción, pero la prueba de inclusión no pudo generarse, porque la transacción, de
+1\,591 bytes, y su recibo, de 1\,675, superaban las cotas del circuito y, sobre todo, porque la
+transacción no se dirigía a \texttt{Sender}. No se acuñó ningún token, y los 10 GUA de esa
+operación quedaron en custodia en la cadena de origen, ya que el contrato no ofrece una función
+para devolverlos.
+
+Antes de ese despliegue, el mismo flujo se había ejecutado con destino en una red local de Anvil
+con las reglas posteriores a Osaka, con un bloqueo de 42 GUA y la firma de 509 de los 512 miembros
+del comité. Las 33 pruebas automatizadas de los contratos y las 30 del circuito de inclusión
 concluyeron con éxito, incluidas las de rechazo descritas en la Sección~\ref{sec:metodologia_gas}.
 En el circuito del comité, con datos reales, se comprobó además el rechazo de una participación
 inferior a dos tercios, de una clave ajena al comité y de raíces de transacciones o de recibos
@@ -498,8 +513,8 @@ pico de unos 86 GiB, pero en momentos distintos. En Noir, ese pico corresponde a
 que puede realizarse una sola vez y en un equipo distinto del que opera el \textit{relayer},
 puesto que el circuito compilado y la clave de verificación se conservan como archivos. El equipo
 que genera las pruebas necesita entonces unos 19 GiB de memoria en el circuito medido, y los
-circuitos que integran el puente se probaron en un equipo de 18 GB, aunque la memoria máxima de
-esa generación no se midió. En SP1, el pico corresponde a
+circuitos que integran el puente se probaron en un equipo de 18 GB, con un máximo de unos 12,9 GB
+en la prueba de emparejamiento. En SP1, el pico corresponde a
 cada generación de prueba, de modo que el equipo del \textit{relayer} debe disponer en todo momento
 de una memoria del orden de 90 GiB. Este requisito incide directamente en el costo de la máquina en
 la nube que opera el puente.
@@ -547,14 +562,15 @@ Groth16, cuyo tiempo de generación no se midió, de modo que la comparación co
 mayor costo de generación por prueba en SP1 con un menor costo de verificación por transacción. El
 costo de verificación se paga en cada anclaje y en cada acuñación, y lo paga quien presenta las
 pruebas, mientras que el de generación lo soporta el equipo del probador. La elección entre ambas
-herramientas depende, en consecuencia, de cuál de esos dos costos resulte determinante para la
+herramientas depende de cuál de esos dos costos resulte determinante para la
 operación del puente.
 
 En relación con la pregunta de investigación, los resultados indican que, para la verificación de
 la firma agregada del comité de sincronización, SP1 ofrece una ventaja clara en la flexibilidad de
 desarrollo, en el costo de la primera prueba y en el costo de verificación en la cadena de destino,
 pero no en el tiempo de generación de las pruebas en operación, en el que Noir resulta unas 5,7
-veces más rápido por prueba y requiere unas cuatro veces menos memoria. Las mediciones de
+veces más rápido por prueba y requiere unas cuatro veces menos memoria. Estas razones describen la
+configuración evaluada y no una propiedad general de ambas herramientas. Las mediciones de
 generación se limitan al programa de consenso, al procesador como único recurso de cómputo y a una
 sola ejecución por etapa, y en Noir corresponden a un circuito que demuestra un enunciado menor que
 el de SP1. Las de verificación excluyen las transacciones completas de anclaje y de acuñación de

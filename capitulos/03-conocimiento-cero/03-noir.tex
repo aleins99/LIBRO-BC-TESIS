@@ -244,10 +244,11 @@ emparejamiento sobre la curva BN254, así como el de exponenciación modular~\ci
 
 Según su documentación y su código fuente, el prototipo del puente distribuye estas herramientas
 en dos momentos. Nargo y la interfaz \texttt{bb} se emplean durante la preparación, para compilar
-el circuito y generar la clave de verificación y el contrato verificador. Durante cada operación
-del puente, en cambio, el servicio que genera las pruebas utiliza \texttt{noir\_js} para calcular
-el testigo y \texttt{bb.js} para generar la prueba, mientras que la verificación se realiza en la
-cadena de destino mediante el contrato generado. Los detalles de esta integración se describen
+los circuitos y generar sus claves de verificación y sus contratos verificadores. Durante cada
+operación del puente, el servicio que genera las pruebas también recurre al ejecutable nativo
+\texttt{bb}, porque la versión para WebAssembly, \texttt{bb.js}, no dispone de memoria suficiente
+para los circuitos del puente, y la verificación se realiza en la cadena de destino mediante los
+contratos generados. Los detalles de esta integración se describen
 en el Capítulo~\ref{chp:zkbridge}.
 
 El sistema de prueba que implementa Barretenberg en esta modalidad es \textbf{UltraHonk}, al que
@@ -396,7 +397,7 @@ la compilación, y las instrucciones para interrumpir un ciclo solo se admiten e
 restringido~\cite{noirdocsbeta}. Los parámetros del programa principal deben tener un tamaño fijo,
 por lo que datos de longitud variable, como una transacción codificada en RLP o los nodos de una
 prueba de Merkle-Patricia, deben representarse mediante arreglos de un tamaño máximo acompañados
-de su longitud efectiva. El circuito incluye, en consecuencia, las restricciones correspondientes
+de su longitud efectiva. El circuito incluye, por ello, las restricciones correspondientes
 al tamaño máximo con independencia de la longitud real de los datos.
 
 El costo de los hashes binarios y de la aritmética sobre cuerpos no nativos tampoco desaparece

@@ -5,7 +5,7 @@ La implementación en SP1 expresa los dos enunciados presentados en la
 Sección~\ref{sec:puente_arquitectura} mediante dos programas invitados escritos en Rust, cuya
 ejecución se demuestra en la máquina virtual descrita en la Sección~\ref{sec:sp1}, y dos programas
 anfitriones que preparan sus entradas y solicitan las pruebas. La arquitectura, los contratos y el
-flujo de una transferencia son los de la Sección~\ref{sec:lock_and_mint}, por lo que esta sección
+flujo de una transferencia son los descritos en la Sección~\ref{sec:lock_and_mint}, por lo que esta sección
 sigue la estructura de la Sección~\ref{sec:noir_impl} y se ocupa de lo que demuestra cada programa,
 de la codificación y la verificación de sus valores públicos y de la generación de las pruebas. La
 descripción corresponde al código del repositorio del puente y de los repositorios de sus dos
@@ -102,9 +102,11 @@ enviarlas, pero esa conducta solo evita trabajo innecesario. La condición que i
 del receptor, que se aplica a cualquier parte que presente la prueba. Los datos de la llamada se
 vinculan con el destinatario y el monto del mismo modo descrito en la
 Sección~\ref{sec:puente_aceptacion}, ya que el receptor recibe esos datos, comprueba su longitud y
-su hash frente a los comprometidos y decodifica de ellos la llamada a \texttt{lock}. El evento
-\texttt{Locked} sirve al \textit{relayer} para detectar la operación, mientras que el receptor se
-apoya en el recibo probado.
+su hash frente a los comprometidos y decodifica de ellos la llamada a \texttt{lock}. El programa
+no examina los eventos del recibo, a diferencia del circuito de inclusión de Noir
+(Sección~\ref{sec:noir_impl_inclusion}). El evento \texttt{Locked} sirve al \textit{relayer} para
+detectar la operación, mientras que el receptor se apoya en el recibo probado y en los datos de la
+llamada.
 
 \subsection{Valores públicos y verificación en Solidity}
 \label{sec:sp1_impl_publicas}
@@ -130,9 +132,72 @@ prueba no es válida para esa combinación~\cite{sp1contracts}. Las claves de lo
 fijan como valores inmutables al desplegar los contratos, por lo que una prueba válida de otro
 programa con valores de la misma forma se rechaza. El verificador incorpora los valores públicos a
 través de su hash SHA-256 (Sección~\ref{sec:sp1_flujo}), de manera que alterar un solo byte de la
-secuencia invalida la prueba. Los campos y el uso que hacen de ellos los contratos coinciden con
-los de la Tabla~\ref{tab:valores_publicos}, y no se encontraron diferencias. Conviene precisar dos
-aspectos de esta implementación. El indicador \texttt{txSucceeded} implica \texttt{receiptVerified},
+secuencia invalida la prueba. La Tabla~\ref{tab:valores_publicos} enumera los campos de ambos
+programas y el uso que hacen de ellos los contratos. Algunos no intervienen en ninguna
+comprobación y se exponen con fines de trazabilidad, como las raíces que
+\texttt{BeaconLightClient} registra en el evento de anclaje o el hash de la transacción que
+\texttt{ZKReceiver} registra en el evento \texttt{Minted}.
+
+\begin{table}[h!]
+	\centering
+	\caption{Valores públicos de los programas de consenso y de inclusión de SP1 y uso que hacen de
+	ellos los contratos de destino.}
+	\label{tab:valores_publicos}
+	\footnotesize
+	\begin{tabular}{>{\raggedright\arraybackslash}p{3.6cm} >{\raggedright\arraybackslash}p{5.9cm}
+		>{\raggedright\arraybackslash}p{6.0cm}}
+		\toprule
+		\textbf{Valor} & \textbf{Contenido} & \textbf{Uso en el contrato} \\
+		\midrule
+		\multicolumn{3}{l}{\textit{Programa de consenso, consumido por} \texttt{BeaconLightClient}} \\
+		\addlinespace
+		\texttt{valid} & Conjunción de la verificación de la firma, de la rama SSZ y del umbral de
+		participación. & Debe ser verdadero. \\
+		\texttt{signingRoot} & Mensaje firmado por el comité. & Se registra en el evento de anclaje. \\
+		\texttt{headerRoot} & Raíz del encabezado de la cadena de baliza. & Se registra en el evento
+		de anclaje. \\
+		\texttt{executionBlockHash} & Hash del bloque de ejecución. & Se ancla y no puede ser cero. \\
+		\texttt{domain} & Dominio de firma. & Debe coincidir con el fijado por el propietario. \\
+		\texttt{slot} & \textit{Slot} del encabezado. & Se registra con el anclaje y no puede ser
+		cero. \\
+		\texttt{blockHashGindex} & Índice generalizado de la rama SSZ. & Debe coincidir con el fijado
+		por el propietario. \\
+		\texttt{committeeCommitment} & Hash SHA-256 de las claves del comité. & Debe coincidir con el
+		fijado por el propietario. \\
+		\texttt{committeeSize}, \texttt{participants} & Tamaño del comité y número de firmantes. & No
+		se comprueban, porque el umbral forma parte de \texttt{valid}. \\
+		\midrule
+		\multicolumn{3}{l}{\textit{Programa de inclusión, consumido por} \texttt{ZKReceiver}} \\
+		\addlinespace
+		\texttt{verified} & Resultado de la comprobación de inclusión. & Debe ser verdadero. \\
+		\texttt{headerBound} & La raíz de transacciones proviene del encabezado. & Debe ser
+		verdadero. \\
+		\texttt{txParsed} & El sobre de la transacción pudo decodificarse. & Debe ser verdadero. \\
+		\texttt{txType} & Tipo de la transacción. & No se comprueba. \\
+		\texttt{blockHash} & Hash Keccak-256 del encabezado de ejecución. & Debe estar anclado y forma
+		parte de la clave contra la reutilización. \\
+		\texttt{transactionsRoot} & Raíz del árbol de transacciones. & El programa la contrasta con
+		la raíz reconstruida, y el contrato no la compara por separado. \\
+		\texttt{txIndex} & Posición de la transacción en el bloque. & Forma parte de la clave contra la
+		reutilización. \\
+		\texttt{txHash} & Hash Keccak-256 de la transacción. & Se registra en el evento
+		\texttt{Minted}. \\
+		\texttt{txTo} & Destinatario de la transacción. & Debe ser el contrato \texttt{Sender}. \\
+		\texttt{txValue} & Valor transferido en la moneda nativa. & No se comprueba. \\
+		\texttt{txDataHash} & Hash Keccak-256 de los datos de la llamada. & Debe coincidir con el de los
+		datos recibidos. \\
+		\texttt{txDataLen} & Longitud de los datos de la llamada. & Debe coincidir con la de los datos
+		recibidos. \\
+		\texttt{receiptVerified} & El recibo de la misma posición pertenece al árbol de recibos del
+		encabezado. & Debe ser verdadero. \\
+		\texttt{txSucceeded} & Ese recibo registra una ejecución exitosa. & Debe ser verdadero. \\
+		\texttt{receiptsRoot} & Raíz del árbol de recibos. & El programa la contrasta con la raíz
+		reconstruida, y el contrato no la compara por separado. \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+El indicador \texttt{txSucceeded} implica \texttt{receiptVerified},
 porque el programa solo lo activa sobre un recibo verificado, y \texttt{ZKReceiver} comprueba
 ambos, de modo que un recibo no verificado se rechaza con \texttt{ReceiptNotVerified} antes de
 examinar el éxito. Las raíces \texttt{transactionsRoot} y \texttt{receiptsRoot} se contrastan dentro

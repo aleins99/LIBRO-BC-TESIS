@@ -2,263 +2,274 @@
 \label{sec:noir_impl}
 
 La implementación en Noir expresa los dos enunciados presentados en la
-Sección~\ref{sec:puente_arquitectura} mediante dos programas, uno de consenso y otro de inclusión,
-cada uno de los cuales se compila en un circuito cuyas pruebas genera Barretenberg con el sistema
-UltraHonk. Los contratos de destino, el \textit{relayer} y el flujo de una transferencia son los de
-la Sección~\ref{sec:lock_and_mint}. Esta sección describe las relaciones que establece cada
-programa, las consecuencias de expresarlas como circuitos, la codificación de sus valores
-públicos, los contratos verificadores y la integración con el resto del puente. Como las
-relaciones son las mismas que demuestran los programas de SP1, su descripción sirve también de
-referencia para la sección siguiente. Las herramientas corresponden a las versiones indicadas en
-la Sección~\ref{sec:noir}, Nargo~1.0.0-beta.22 y Barretenberg~5.0.0-nightly.20260522.
+Sección~\ref{sec:puente_arquitectura} mediante tres circuitos, dos para el enunciado de consenso y
+uno para el de inclusión, cuyas pruebas genera Barretenberg con el sistema UltraHonk. Comparte con
+la implementación en SP1 el token, el contrato \texttt{Sender}, la interfaz y el recorrido general
+de una transferencia, pero difiere en la organización de las pruebas y en los contratos de
+destino, diferencias que resume la Sección~\ref{sec:puente_variantes}. Esta sección describe lo
+que establece cada circuito, las consecuencias de expresarlo como un conjunto de restricciones,
+la codificación de sus valores públicos, los contratos que los consumen y la integración con el
+\textit{relayer}. La descripción corresponde al código de los repositorios del puente y de sus
+circuitos~\cite{guaranibridgenoir, zkbridgezerorepo, noirmerklerepo}, con las versiones de las
+herramientas indicadas en la Sección~\ref{sec:noir}, Nargo~1.0.0-beta.22 y
+Barretenberg~5.0.0-nightly.20260522.
 
 \subsection{Programa de consenso}
 \label{sec:noir_impl_consenso}
 
-El programa de consenso recibe los cinco campos del encabezado de la cadena de baliza que firmó el
-comité, es decir, el \textit{slot}, el índice del validador proponente y las raíces
-\texttt{parent\_root}, \texttt{state\_root} y \texttt{body\_root}
-(Sección~\ref{sec:eth_consenso}). Recibe, además, el dominio de firma, las claves públicas
-comprimidas de los 512 miembros del comité, el vector de participación, la firma agregada, el hash
-del bloque de ejecución que se pretende anclar y la rama SSZ que lo vincula con
-\texttt{body\_root}, junto con su índice generalizado. Con estos datos, el programa deriva el
-mensaje firmado y realiza tres comprobaciones. Para derivar el mensaje, calcula la raíz del
-encabezado mediante la función \texttt{hash\_tree\_root}, que organiza sus cinco campos en un
-árbol binario de ocho hojas~\cite{sszspec}, y obtiene el hash SHA-256 de la concatenación de esa
-raíz con el dominio, que es la forma que adopta la raíz de firma de la especificación de consenso
-para un contenedor de dos raíces~\cite{ethconsensusphase0}. La primera comprobación suma las
-claves de los miembros cuyo bit de participación vale uno y verifica la
-Ecuación~\eqref{eq:bls_agregada} sobre ese mensaje. La segunda verifica que la rama SSZ conduce
-desde el hash del bloque de ejecución hasta \texttt{body\_root} y que el índice generalizado
-corresponde exactamente a la profundidad de la rama, condición sin la cual un nodo interno del
-árbol podría hacerse pasar por la hoja buscada. La tercera cuenta los firmantes y comprueba que
-superen los dos tercios del comité, lo que con 512 miembros equivale a un mínimo de 342 firmas. El
-resultado conjunto de las tres comprobaciones se expone como un único valor booleano, que
-\texttt{BeaconLightClient} exige verdadero (Sección~\ref{sec:puente_aceptacion}).
+El enunciado de consenso se reparte entre dos circuitos. Expresado en un único circuito, con
+unos 13,3 millones de compuertas, superó los 91 GB de memoria durante la compilación en el equipo
+disponible, y el sistema operativo terminó el proceso (Sección~\ref{sec:resultados_etapas}). El
+primero, denominado circuito del comité, recibe como entradas privadas las 512 claves públicas
+comprimidas del comité, el vector de participación, la firma agregada, los cinco campos del
+encabezado de la cadena de baliza firmado, el dominio de firma, el hash del bloque de ejecución
+junto con la rama SSZ que lo vincula con \texttt{body\_root} y el encabezado de ejecución
+codificado en RLP (Sección~\ref{sec:eth_consenso}). El circuito comprueba que las claves
+corresponden al compromiso del comité, que el número de participantes multiplicado por tres
+alcanza al menos 1024, es decir, que firmaron 342 o más de los 512 miembros, y suma las claves de
+los participantes. Deriva después la raíz de firma como el hash SHA-256 de la raíz del encabezado,
+calculada mediante \texttt{hash\_tree\_root}~\cite{sszspec}, concatenada con el
+dominio~\cite{ethconsensusphase0}, y la transforma en un punto de $\mathbb{G}_2$ según el
+procedimiento de la RFC~9380, con la etiqueta de separación de dominio que emplea
+Ethereum~\cite{rfc9380}. Comprueba, además, que la firma pertenece a la curva y al subgrupo
+$\mathbb{G}_2$, que la rama SSZ conduce desde el hash del bloque de ejecución hasta
+\texttt{body\_root} y que el hash Keccak-256 del encabezado de ejecución coincide con ese hash. De
+ese encabezado extrae, por último, las raíces de transacciones y de recibos
+(Tabla~\ref{tab:eth_header}), que expone como valores públicos.
 
-Dos decisiones de diseño determinan la utilidad de esta prueba para el
-puente~\cite{zkguaranibridgesp1}. La primera consiste en derivar el mensaje firmado dentro del
-programa, en lugar de recibirlo como un valor de 32 bytes ya calculado. Un mensaje recibido de ese
-modo sería opaco, ya que la prueba no permitiría saber de qué encabezado proviene ni qué bloque de
-ejecución representa. La segunda consiste en sumar las claves dentro del programa y exponer el
-compromiso del comité completo, calculado como el hash SHA-256 de sus 512 claves comprimidas
-concatenadas en orden, en lugar de la clave agregada. La clave agregada depende de qué miembros
-firmaron y cambia, por lo tanto, de un \textit{slot} a otro, mientras que el compromiso permanece
-estable durante el período del comité, de unas 27 horas (Sección~\ref{sec:eth_sync_committee}),
-lo que permite que el propietario de \texttt{BeaconLightClient} lo registre una vez por período.
+El segundo, denominado circuito de emparejamiento, recibe la clave agregada, el punto del mensaje
+y la firma, y verifica la Ecuación~\eqref{eq:bls_agregada}. Los dos emparejamientos de esa
+ecuación comparten el bucle de Miller y una única exponenciación final, lo que reduce el tamaño
+del circuito respecto de evaluarlos por separado. Ninguno de los dos circuitos expone los tres
+puntos, que ocupan varios cientos de bytes, sino un valor de enlace calculado por ambos como el
+hash Poseidon2 de la clave agregada, el punto del mensaje y la firma. \texttt{BeaconLightClient}
+exige que ese valor coincida en las dos pruebas, de modo que una prueba de emparejamiento
+obtenida para otra firma no puede combinarse con la prueba del comité.
+
+Dos decisiones de diseño determinan la utilidad de estas pruebas para el puente. La primera
+consiste en derivar el mensaje firmado dentro del circuito, en lugar de recibirlo como un valor
+ya calculado. Un mensaje recibido de ese modo sería opaco, ya que la prueba no permitiría saber de
+qué encabezado proviene ni qué bloque de ejecución representa, y esa era precisamente la
+limitación de la versión anterior del circuito, que recibía el punto del mensaje y la clave
+pública como entradas libres (Sección~\ref{sec:metodologia_alcance}). La segunda consiste en sumar
+las claves dentro del circuito y exponer el compromiso del comité completo en lugar de la clave
+agregada. La clave agregada depende de qué miembros firmaron y cambia de un \textit{slot} a otro,
+mientras que el compromiso permanece estable durante el período del comité, de 8192
+\textit{slots} o unas 27 horas (Sección~\ref{sec:eth_sync_committee}), lo que permite que el
+propietario de \texttt{BeaconLightClient} lo registre una vez por período. El compromiso se calcula
+con Poseidon2, una función de hash algebraica cuyo costo como circuito es muy inferior al de
+SHA-256 sobre los 24\,576 bytes de las claves, a diferencia de SP1, que emplea SHA-256
+(Sección~\ref{sec:sp1_impl_consenso}).
 
 La expresión de este enunciado en Noir se ve favorecida porque casi todos sus datos tienen un
 tamaño fijado por el protocolo. El comité tiene siempre 512 miembros, cada clave comprimida ocupa
-48 bytes y la firma 96, y la rama tiene nueve niveles, ya que el índice generalizado 812, con el
-que el puente localiza el hash del bloque de ejecución, resulta de componer la posición del campo
-\texttt{execution\_payload} en el cuerpo del bloque, organizado en dieciséis hojas, con la del
-campo \texttt{block\_hash} dentro del \textit{execution payload}, organizado en treinta y
-dos~\cite{zkguaranibridgesp1}. Los arreglos de tamaño fijo que exige el programa principal
-(Sección~\ref{sec:noir_descripcion}) no imponen, por lo tanto, máximos arbitrarios. El costo se
-concentra, en cambio, en la aritmética de la curva BLS12-381. Noir no ofrece funciones de caja
-negra para esa curva~\cite{noirdocsbeta}, de modo que la descompresión de las claves, que exige
-calcular raíces cuadradas en el cuerpo base de 381 bits, su suma, la transformación del mensaje en
-un punto de $\mathbb{G}_2$ y la comprobación de los emparejamientos deben expresarse mediante
-aritmética no nativa, representando cada elemento de ese cuerpo con varios elementos del cuerpo
-nativo (Sección~\ref{sec:noir_limitaciones}). La función $H_{\mathbb{G}_2}$ incorpora, además, sus
-propios hashes, puesto que sigue el procedimiento que define la RFC~9380 para la curva BLS12-381,
-en el que el mensaje se expande mediante SHA-256 antes de transformarse en un punto de la
-curva~\cite{rfc9380, ethconsensusphase0}. Por otra parte, en un circuito una instrucción
-condicional no evita el costo de la rama que no se ejecuta, ya que el compilador genera
-restricciones para ambas~\cite{noirdocsbeta}. La suma condicionada por el vector de participación
-tiene, en consecuencia, el costo correspondiente al comité completo, con independencia del número
-de firmantes. Los hashes SHA-256 del enunciado, entre ellos los de la raíz del encabezado, la rama
-y el compromiso del comité, que abarca 24\,576 bytes, se apoyan en la función de compresión que
-Noir ofrece como caja negra. Si alguna operación costosa, como una raíz cuadrada, se calcula
-mediante una función no restringida, su resultado solo queda respaldado por la prueba cuando el
+48 bytes y la firma 96, y la rama SSZ tiene once niveles, correspondientes al índice generalizado
+2856 con que el cuerpo del bloque de baliza localiza el hash del bloque de ejecución en la
+bifurcación vigente en Sepolia durante las pruebas. Los arreglos de tamaño fijo que exige el
+programa principal (Sección~\ref{sec:noir_descripcion}) no imponen, por ello, máximos arbitrarios,
+aunque una bifurcación que modifique el dominio, la posición de ese campo o el formato del
+encabezado de ejecución obliga a regenerar el circuito del comité y su verificador. El costo se
+concentra en la aritmética de la curva BLS12-381. Noir no ofrece funciones de caja negra para esa
+curva~\cite{noirdocsbeta}, de modo que la descompresión de las claves, que exige calcular raíces
+cuadradas en el cuerpo base de 381 bits, su suma, la transformación del mensaje en un punto de
+$\mathbb{G}_2$ y los emparejamientos se expresan mediante aritmética no nativa, con varios
+elementos del cuerpo nativo para cada elemento de ese cuerpo (Sección~\ref{sec:noir_limitaciones}).
+En un circuito, además, una instrucción condicional no evita el costo de la rama que no se
+ejecuta, ya que el compilador genera restricciones para ambas~\cite{noirdocsbeta}, y la suma
+condicionada por el vector de participación cuesta lo mismo que la del comité completo, con
+independencia del número de firmantes. Los hashes SHA-256 del enunciado, entre ellos los de la
+raíz del encabezado, la rama y la expansión del mensaje, se apoyan en la función de compresión que
+Noir ofrece como caja negra. Cuando una operación costosa, como una raíz cuadrada, se calcula
+mediante una función no restringida, su resultado solo queda respaldado por la prueba si el
 programa lo restringe explícitamente, conforme al patrón de la Figura~\ref{fig:noir_unconstrained}.
 
 \subsection{Programa de inclusión}
 \label{sec:noir_impl_inclusion}
 
-El programa de inclusión recibe el encabezado del bloque de ejecución codificado en RLP, las
-transacciones y los recibos del bloque y la posición de la transacción de bloqueo, que son los
-datos que el
-\textit{relayer} obtiene y contrasta en la segunda etapa del flujo descrito en la
-Sección~\ref{sec:puente_flujo}. El programa calcula el hash Keccak-256 del encabezado, que por
-definición es el hash del bloque (Sección~\ref{sec:eth_bloque}), y extrae del propio encabezado la
-raíz del árbol de transacciones, de manera que esa raíz no es un dato aportado por el probador,
-sino un campo del bloque identificado por ese hash. Recalcula después la raíz del árbol de
-Merkle-Patricia a partir de las transacciones, cuyas claves son las codificaciones RLP de sus
-posiciones (Sección~\ref{sec:eth_mpt}), y comprueba que coincide con la del encabezado y que la
-transacción de bloqueo ocupa la posición declarada. Por último, calcula el hash de esa
-transacción, decodifica su sobre, cuyo formato depende del tipo de transacción~\cite{eip2718}, y
-extrae el destinatario, el valor transferido y los datos de la llamada, de los cuales expone el
-hash Keccak-256 y la longitud~\cite{zkguaranibridgesp1}.
+El circuito de inclusión recibe las raíces de transacciones y de recibos, la posición de la
+transacción de bloqueo, la transacción y su recibo serializados y los nodos de las ramas del
+árbol de Merkle-Patricia que conducen desde cada raíz hasta la hoja de esa posición
+(Sección~\ref{sec:eth_mpt}). A diferencia del programa de SP1, no recibe el encabezado de
+ejecución ni las demás transacciones del bloque, ya que la vinculación de las raíces con el
+encabezado la establece el circuito del comité, y no reconstruye los árboles completos, sino que
+verifica una rama en cada uno. Cada rama tiene hasta seis nodos, uno por nivel. El circuito
+comprueba que el hash Keccak-256 del primer nodo coincide con la raíz y que el de cada nodo
+siguiente coincide con la referencia que guarda su padre, recorre los nodos de ramificación y de
+extensión según los \textit{nibbles} de la clave, que es la codificación RLP de la posición, y
+exige que la hoja contenga exactamente la transacción o el recibo serializado. El procedimiento se
+aplica dos veces con la misma posición, una en el árbol de transacciones y otra en el de recibos,
+de modo que no es posible presentar el recibo exitoso de otra transacción. Como todas las
+referencias entre nodos deben ser hashes, el circuito no admite los nodos de menos de 32 bytes
+que el árbol puede incrustar en su padre.
+Decodifica después el sobre de la transacción, cuyo formato depende de su
+tipo~\cite{eip2718}, y exige que se dirija directamente al contrato \texttt{Sender} y que sus datos
+correspondan a una llamada a \lstinline|lock(address,uint256)|, identificada por el selector
+\texttt{0x282d3fdf}, de la que extrae el destinatario y el monto. Se admiten las transacciones
+heredadas y las de los tipos 1 a 4. Del recibo lee el código de estado, que debe indicar una
+ejecución exitosa~\cite{eip658}, y busca entre sus eventos uno \texttt{Locked} emitido por
+\texttt{Sender}, del que obtiene el identificador del bloqueo, el destinatario y el monto. Los
+dos últimos deben coincidir con los de la llamada.
 
-La inclusión no basta, sin embargo, para el puente, porque una transacción que revierte permanece
-en el bloque sin haber bloqueado ningún token (Sección~\ref{sec:eth_mpt}). Por ello, el programa
-extrae también del encabezado la raíz del árbol de recibos, recalcula esa raíz a partir de los
-recibos del bloque, que se organizan con las mismas claves que las transacciones, y lee el código
-de estado del recibo situado en la posición de la transacción de bloqueo~\cite{eip658}. Expone
-como valores públicos si ese recibo pertenece al árbol del encabezado y si registra una ejecución
-exitosa, y \texttt{ZKReceiver} exige ambas condiciones (Sección~\ref{sec:puente_aceptacion}).
-
-El programa no interpreta la llamada a \texttt{lock}. Los datos de la llamada tienen longitud
-variable y su incorporación íntegra a los valores públicos aumentaría su tamaño, por lo que el
-enunciado expone solo su hash y su longitud. \texttt{ZKReceiver} recibe esos datos como argumento,
-comprueba que su hash y su longitud coinciden con los comprometidos por la prueba y obtiene de
-ellos el destinatario y el monto (Sección~\ref{sec:puente_aceptacion}). La vinculación con la
-transacción probada se conserva, ya que presentar otros datos con el mismo hash exigiría encontrar
-una segunda preimagen de Keccak-256.
+La comprobación del evento no es necesaria para la seguridad del puente, puesto que una llamada
+directa a \texttt{lock} que termina sin revertir implica que el evento se emitió
+(Sección~\ref{sec:puente_aceptacion}). Cumple, sin embargo, dos funciones en esta implementación.
+Aporta el identificador del bloqueo, que el contrato asigna durante la ejecución y que no figura en
+los datos de la llamada, y que \texttt{ReceiverZKBound} emplea para impedir que una operación se
+procese dos veces, y añade un control redundante frente a errores en la decodificación de la
+llamada. El programa de inclusión de SP1, en cambio, no examina los eventos del recibo y obtiene
+el destinatario y el monto únicamente de los datos de la llamada
+(Sección~\ref{sec:sp1_impl_inclusion}). En ambos casos, la exigencia de una llamada directa
+implica que un bloqueo realizado a través de otro contrato no puede demostrarse. Esta limitación
+tiene consecuencias prácticas, porque las billeteras comienzan a convertir las cuentas de sus
+usuarios en cuentas inteligentes mediante la delegación de código que introduce la
+EIP-7702~\cite{eip7702}, con la que el bloqueo llega a \texttt{Sender} como una llamada interna.
+Las pruebas en Optimism Sepolia registraron un caso de este tipo (Sección~\ref{sec:resultados_gas}).
 
 La expresión de este enunciado como circuito presenta una dificultad que no aparece en el de
-consenso, porque ninguno de sus datos tiene un tamaño fijado por el protocolo. La longitud del
-encabezado depende de la cantidad de campos que añadieron las sucesivas actualizaciones
-(Sección~\ref{sec:eth_bloque}), el número de transacciones varía de un bloque a otro y cada
-transacción y cada recibo, que incluye los eventos emitidos, tienen su propia longitud. Como los
-parámetros del programa principal deben tener un tamaño fijo, el programa recibe arreglos
-dimensionados para un encabezado de longitud máxima, un número máximo de transacciones y una
-longitud máxima por transacción y por recibo, acompañados de las longitudes efectivas (Sección~\ref{sec:noir_limitaciones}). Las operaciones cuyo recorrido depende
-de los datos, como la decodificación RLP, cuyas posiciones solo se conocen durante la ejecución, o
-el cálculo de Keccak-256 sobre entradas de longitud variable a partir de la permutación que Noir
-ofrece como caja negra, se expresan mediante ciclos acotados por esos máximos, que el compilador
-desenrolla, y mediante accesos a posiciones de los arreglos que solo se conocen durante la
-ejecución, más costosos que los accesos a posiciones fijas~\cite{noirdocsbeta}. El circuito
-incorpora, en consecuencia, las restricciones correspondientes a los tamaños máximos con
-independencia del bloque concreto, y un bloque que los supere no puede demostrarse con él.
-Aumentar los máximos modifica el circuito y, con él, su clave de verificación y su contrato
-verificador (Sección~\ref{sec:noir_impl_publicas}). Estos máximos constituyen, por lo tanto, un
-parámetro del diseño que condiciona tanto los bloques admisibles como el costo de cada prueba, y
-su efecto se considera en la metodología de comparación.
+consenso, porque la transacción, el recibo y los nodos de las ramas no tienen un tamaño fijado por
+el protocolo. El recibo, en particular, incluye todos los eventos emitidos. Como los parámetros
+del programa principal deben tener un tamaño fijo, el circuito recibe arreglos dimensionados para
+una longitud máxima, acompañados de las longitudes efectivas
+(Sección~\ref{sec:noir_limitaciones}). Las operaciones cuyo recorrido depende de los datos, como
+la decodificación RLP o el cálculo de Keccak-256 sobre entradas de longitud variable a partir de
+la permutación que Noir ofrece como caja negra, se expresan mediante ciclos acotados por esos
+máximos, que el compilador desenrolla, y mediante accesos a posiciones de los arreglos que solo se
+conocen durante la ejecución, más costosos que los accesos a posiciones fijas~\cite{noirdocsbeta}.
+El circuito incorpora, por ello, las restricciones correspondientes a los tamaños máximos con
+independencia de la transacción concreta. Para el árbol de transacciones se adoptaron cotas
+menores que para el de recibos, con hojas de hasta 256 bytes y nodos de hasta 543, lo que basta
+para una transacción de bloqueo, que ocupa entre 173 y 181 bytes. En el árbol de recibos, las
+hojas admiten hasta 784 bytes y los nodos hasta 800. Con esas cotas el circuito tiene
+4\,105\,601 compuertas y cabe en $2^{22}$ filas, mientras que con las cotas de los recibos
+aplicadas a ambos árboles alcanzaba unos 4,94 millones de compuertas y requería $2^{23}$.
+Una transacción que supere esos máximos no puede demostrarse, y aumentarlos modifica el circuito
+y, con él, su clave de verificación y su contrato verificador.
 
 \subsection{Valores públicos y contratos verificadores}
 \label{sec:noir_impl_publicas}
 
-Los valores públicos de ambos programas son los que consumen los contratos de destino, por lo que
-su contenido coincide con el de la implementación en SP1. La Tabla~\ref{tab:valores_publicos} los
-enumera con los nombres de los campos que utilizan los contratos e indica el uso que cada contrato
-hace de ellos. Algunos no intervienen en ninguna comprobación y se exponen con fines de
-trazabilidad, como las raíces que \texttt{BeaconLightClient} registra en el evento que emite al
-anclar un bloque o el hash de la transacción que \texttt{ZKReceiver} registra en el evento
-\texttt{Minted}.
-
-En Noir, estos valores se expresan como entradas públicas del circuito, cada una de las cuales es
-un elemento del cuerpo de 254 bits de Barretenberg (Sección~\ref{sec:noir_descripcion}). Los
-valores booleanos y los enteros de hasta 64 bits ocupan un elemento cada uno. Un valor de 32 bytes,
-como un hash, el dominio o el compromiso del comité, puede superar en cambio el módulo de ese
-cuerpo, por lo que no puede representarse en un único elemento sin pérdida de información y debe
-descomponerse en varios, por ejemplo en sus bytes, como ocurre con los arreglos de tipo
-\lstinline|u8| (Sección~\ref{sec:noir_limitaciones}), o en dos mitades de 128 bits. Mientras que en
-SP1 los valores públicos forman una secuencia de bytes que el contrato decodifica según el ABI de
-Ethereum (Sección~\ref{sec:sp1_programas}), aquí el contrato recibe un arreglo de elementos de 32
-bytes y debe reconstruir cada valor a partir de los elementos que lo representan antes de aplicar
-las comprobaciones de la Sección~\ref{sec:puente_aceptacion}, que no cambian. La descomposición y
-el orden de las entradas forman parte, por lo tanto, de la interfaz entre el programa y el
-contrato, y una discrepancia entre ambos haría que el contrato comparara valores distintos de los
-demostrados. La descomposición elegida incide, además, en el costo, ya que el verificador generado
-incorpora cada entrada pública en la transcripción de Fiat-Shamir y en el cálculo del término que
-la vincula con la prueba, de modo que su costo en gas crece con el número de
-entradas~\cite{barretenbergsrc}.
-
-El contrato verificador lo genera Barretenberg a partir de la clave de verificación de cada
-circuito, con el destino \lstinline|evm| descrito en la Sección~\ref{sec:noir_flujo}. En la
-versión utilizada, el contrato generado incorpora como constantes la clave de verificación, que
-incluye el tamaño del circuito y el número de entradas públicas, y expone una función
-\lstinline|verify| que recibe la prueba y el arreglo de entradas públicas. Esta función comprueba
-que la longitud de la prueba, que depende del logaritmo del tamaño del circuito, y el número de
-entradas sean los esperados, recalcula los desafíos de Fiat-Shamir con Keccak, verifica el
-protocolo \textit{sumcheck} y la apertura de los compromisos KZG mediante los contratos
-precompilados de la curva BN254, y revierte la transacción si alguna de estas comprobaciones
-falla~\cite{barretenbergsrc}. Como la clave de verificación forma parte del contrato, cada
-circuito requiere su propio verificador, de modo que el papel del contrato verificador de la
-Sección~\ref{sec:puente_arquitectura} lo cumplen dos contratos generados, uno para el programa de
-consenso y otro para el de inclusión. Fijar en los contratos de destino la dirección del
-verificador de cada circuito cumple la misma función que fijar la clave del programa en SP1, ya que
-un verificador distinto aceptaría pruebas de otro circuito. Ambos verificadores emplean la cadena
-de referencia universal de la ceremonia Ignition, por lo que no requieren una ceremonia
-específica para cada circuito (Sección~\ref{sec:noir_flujo}), y pueden desplegarse en Optimism
-Sepolia sin modificaciones (Sección~\ref{sec:op_tarifas}).
-
-\subsection{Generación de las pruebas e integración}
-\label{sec:noir_impl_integracion}
-
-La preparación se realiza una vez por circuito. Nargo compila los dos programas, Barretenberg
-obtiene la clave de verificación de cada circuito y genera su contrato verificador, y ambos
-verificadores se despliegan en la cadena de destino antes que \texttt{BeaconLightClient} y
-\texttt{ZKReceiver}, en los que sus direcciones se configuran junto con los parámetros de política
-descritos en la Sección~\ref{sec:puente_arquitectura}. La cadena de referencia debe contener al
-menos tantos puntos como requiere el mayor de los dos circuitos, y sus puntos se descargan cuando
-no están disponibles localmente (Sección~\ref{sec:noir_flujo}). Cualquier modificación de un
-programa, incluida la de sus tamaños máximos, exige repetir estos pasos para el circuito afectado.
+En Noir, los valores públicos se expresan como entradas públicas del circuito, cada una de las
+cuales es un elemento del cuerpo de 254 bits de Barretenberg (Sección~\ref{sec:noir_descripcion}).
+Un valor de 32 bytes, como un hash, puede superar el módulo de ese cuerpo y debe descomponerse en
+varios elementos, ya sea en sus bytes, como ocurre con los arreglos de tipo \lstinline|u8|
+(Sección~\ref{sec:noir_limitaciones}), o en dos mitades de 128 bits. El circuito del comité adopta
+la segunda opción para las dos raíces y expone siete entradas, el circuito de emparejamiento
+expone solo el valor de enlace y el de inclusión expone 168 entradas, una por byte. La
+Tabla~\ref{tab:valores_publicos_noir} detalla su contenido y el uso que hacen de ellas los
+contratos de destino. La descomposición y el orden de las entradas forman parte de la interfaz
+entre el circuito y el contrato, y una discrepancia entre ambos haría que el contrato comparara
+valores distintos de los demostrados. La descomposición incide, además, en el costo, ya que el
+verificador generado incorpora cada entrada pública en la transcripción de Fiat-Shamir y en el
+término que la vincula con la prueba, de modo que el gas crece con el número de
+entradas~\cite{barretenbergsrc}, efecto que se cuantifica en la Sección~\ref{sec:resultados_gas}.
 
 \begin{table}[h!]
 	\centering
-	\caption{Valores públicos de los programas de consenso y de inclusión y uso que hacen de ellos
-	los contratos de destino.}
-	\label{tab:valores_publicos}
+	\caption{Entradas públicas de los circuitos de Noir y uso que hacen de ellas los contratos de
+	destino.}
+	\label{tab:valores_publicos_noir}
 	\footnotesize
-	\begin{tabular}{>{\raggedright\arraybackslash}p{3.6cm} >{\raggedright\arraybackslash}p{5.9cm}
-		>{\raggedright\arraybackslash}p{6.0cm}}
+	\begin{tabular}{>{\raggedright\arraybackslash}p{3.7cm} >{\raggedright\arraybackslash}p{5.6cm}
+		>{\raggedright\arraybackslash}p{6.2cm}}
 		\toprule
-		\textbf{Valor} & \textbf{Contenido} & \textbf{Uso en el contrato} \\
+		\textbf{Entrada} & \textbf{Contenido} & \textbf{Uso en el contrato} \\
 		\midrule
-		\multicolumn{3}{l}{\textit{Programa de consenso, consumido por} \texttt{BeaconLightClient}} \\
+		\multicolumn{3}{l}{\textit{Circuito del comité, siete elementos, consumido por}
+		\texttt{BeaconLightClient}} \\
 		\addlinespace
-		\texttt{valid} & Conjunción de la verificación de la firma, de la rama SSZ y del umbral de
-		participación. & Debe ser verdadero. \\
-		\texttt{signingRoot} & Mensaje firmado por el comité. & Se registra en el evento de anclaje. \\
-		\texttt{headerRoot} & Raíz del encabezado de la cadena de baliza. & Se registra en el evento
-		de anclaje. \\
-		\texttt{executionBlockHash} & Hash del bloque de ejecución. & Se ancla y no puede ser cero. \\
-		\texttt{domain} & Dominio de firma. & Debe coincidir con el fijado por el propietario. \\
-		\texttt{slot} & \textit{Slot} del encabezado. & Se registra con el anclaje y no puede ser
-		cero. \\
-		\texttt{blockHashGindex} & Índice generalizado de la rama SSZ. & Debe coincidir con el fijado
-		por el propietario. \\
-		\texttt{committeeCommitment} & Hash SHA-256 de las claves del comité. & Debe coincidir con el
-		fijado por el propietario. \\
-		\texttt{committeeSize}, \texttt{participants} & Tamaño del comité y número de firmantes. & No
-		se comprueban, porque el umbral forma parte de \texttt{valid}. \\
+		\texttt{committee\_commitment} & Hash Poseidon2 de las 512 claves del comité. & Debe
+		coincidir con el registrado por el propietario para el período del \textit{slot}. \\
+		\texttt{slot} & \textit{Slot} del encabezado firmado. & Determina el período, igual al
+		cociente entre el \textit{slot} y 8192. \\
+		\texttt{link} & Hash Poseidon2 de la clave agregada, el punto del mensaje y la firma. & Debe
+		coincidir con el del circuito de emparejamiento. \\
+		\texttt{transactions\_root} (dos mitades) & Raíz de transacciones del bloque de ejecución. &
+		Se registra junto con la raíz de recibos. \\
+		\texttt{receipts\_root} (dos mitades) & Raíz de recibos del mismo bloque. & Se registra junto
+		con la raíz de transacciones. \\
 		\midrule
-		\multicolumn{3}{l}{\textit{Programa de inclusión, consumido por} \texttt{ZKReceiver}} \\
+		\multicolumn{3}{l}{\textit{Circuito de emparejamiento, un elemento, consumido por}
+		\texttt{BeaconLightClient}} \\
 		\addlinespace
-		\texttt{verified} & Resultado de la comprobación de inclusión. & Debe ser verdadero. \\
-		\texttt{headerBound} & La raíz de transacciones proviene del encabezado. & Debe ser
-		verdadero. \\
-		\texttt{txParsed} & El sobre de la transacción pudo decodificarse. & Debe ser verdadero. \\
-		\texttt{txType} & Tipo de la transacción. & No se comprueba. \\
-		\texttt{blockHash} & Hash Keccak-256 del encabezado de ejecución. & Debe estar anclado y forma
-		parte de la clave contra la reutilización. \\
-		\texttt{transactionsRoot} & Raíz del árbol de transacciones. & El programa la contrasta con
-		la raíz reconstruida, y el contrato no la compara por separado. \\
-		\texttt{txIndex} & Posición de la transacción en el bloque. & Forma parte de la clave contra la
-		reutilización. \\
-		\texttt{txHash} & Hash Keccak-256 de la transacción. & Se registra en el evento
-		\texttt{Minted}. \\
-		\texttt{txTo} & Destinatario de la transacción. & Debe ser el contrato \texttt{Sender}. \\
-		\texttt{txValue} & Valor transferido en la moneda nativa. & No se comprueba. \\
-		\texttt{txDataHash} & Hash Keccak-256 de los datos de la llamada. & Debe coincidir con el de los
-		datos recibidos. \\
-		\texttt{txDataLen} & Longitud de los datos de la llamada. & Debe coincidir con la de los datos
-		recibidos. \\
-		\texttt{receiptVerified} & El recibo de la misma posición pertenece al árbol de recibos del
-		encabezado. & Debe ser verdadero. \\
-		\texttt{txSucceeded} & Ese recibo registra una ejecución exitosa. & Debe ser verdadero. \\
-		\texttt{receiptsRoot} & Raíz del árbol de recibos. & El programa la contrasta con la raíz
-		reconstruida, y el contrato no la compara por separado. \\
+		\texttt{link} & Mismo valor de enlace. & Debe coincidir con el del circuito del comité. \\
+		\midrule
+		\multicolumn{3}{l}{\textit{Circuito de inclusión, 168 elementos de un byte, consumido por}
+		\texttt{ReceiverZKBound}} \\
+		\addlinespace
+		\texttt{receiptsRoot} (32) & Raíz de recibos. & El par de raíces debe estar registrado. \\
+		\texttt{sender} (20) & Contrato que emitió el evento y recibió la llamada. & Debe ser el
+		\texttt{Sender} configurado. \\
+		\texttt{id} (32) & Identificador del bloqueo, tomado del evento. & Debe coincidir con el
+		argumento de la llamada y no haberse procesado antes. \\
+		\texttt{recipient} (20) & Destinatario en la cadena de destino. & Debe coincidir con el
+		argumento de la llamada. \\
+		\texttt{amount} (32) & Monto bloqueado. & Debe coincidir con el argumento de la llamada. \\
+		\texttt{transactionsRoot} (32) & Raíz de transacciones. & El par de raíces debe estar
+		registrado. \\
 		\bottomrule
 	\end{tabular}
 \end{table}
 
-Durante cada transferencia, el \textit{relayer} sigue las etapas de la
-Sección~\ref{sec:puente_flujo}. Una vez obtenidos y contrastados los datos de la cadena de origen,
-los organiza según la interfaz de cada programa, lo que incluye completar los arreglos hasta sus
-tamaños máximos e indicar las longitudes efectivas, ejecuta los programas con \texttt{noir\_js}
-para obtener los testigos y genera las pruebas con \texttt{bb.js} y el destino \lstinline|evm|
-(Sección~\ref{sec:noir_flujo}). Cada generación produce la prueba y el arreglo de entradas
-públicas que espera el contrato verificador correspondiente. El \textit{relayer}, común a ambas
-implementaciones, genera las dos pruebas y consulta después si el bloque ya está anclado. Si no lo
-está, las envía a \lstinline|mintRemoteWithHeader|, y si ya lo está, envía solo la de inclusión a
-\lstinline|mintRemote|, en ambos casos junto con los datos de la llamada a \texttt{lock}. Una ejecución que no satisface las aserciones de
-un programa no produce testigo, de modo que esos fallos se detectan antes de generar la prueba.
+\texttt{BeaconLightClient} recibe las pruebas de consenso mediante su función
+\lstinline|update|. Comprueba que el circuito del comité aporta siete entradas y el de
+emparejamiento una, que el compromiso del comité coincide con el registrado para el período del
+\textit{slot} y que el valor de enlace es el mismo en ambas pruebas, delega la verificación de cada
+una en su contrato verificador y, si todas las comprobaciones se cumplen, registra como conocido
+el hash Keccak-256 de la concatenación de las dos raíces y emite un evento con el \textit{slot} y
+ambas raíces. \texttt{ReceiverZKBound} acuña mediante su función \lstinline|release|, que recibe
+la prueba de inclusión, sus entradas públicas y el identificador, el destinatario y el monto de la
+operación. Exige que el par de raíces esté registrado en \texttt{BeaconLightClient}, que las
+entradas coincidan con esas raíces, con el \texttt{Sender} configurado y con los argumentos de la
+llamada, que la prueba sea válida y que el identificador no se haya procesado antes. Registrar el
+par, y no cada raíz por separado, impide combinar la transacción de un bloque con el recibo de
+otro.
+
+El contrato verificador de cada circuito lo genera Barretenberg a partir de su clave de
+verificación, con el destino \lstinline|evm| descrito en la Sección~\ref{sec:noir_flujo}. El
+contrato generado incorpora como constantes la clave de verificación, que incluye el tamaño del
+circuito y el número de entradas públicas, y expone una función \lstinline|verify| que recibe la
+prueba y el arreglo de entradas. Esta función comprueba la longitud de la prueba y el número de
+entradas, recalcula los desafíos de Fiat-Shamir con Keccak, verifica el protocolo
+\textit{sumcheck} y la apertura de los compromisos KZG mediante los contratos precompilados de la
+curva BN254, y revierte la transacción si alguna comprobación falla~\cite{barretenbergsrc}. Como
+la clave forma parte del contrato, cada circuito requiere su propio verificador, de modo que el
+puente despliega tres, \texttt{CommitteeVerifier}, \texttt{PairingVerifier} y
+\texttt{TxInclusionVerifier}, cuyo código ocupa entre 17\,155 y 17\,532 bytes, por debajo del
+límite de 24\,576 bytes que establece la EIP-170~\cite{eip170}. Fijar en los contratos de destino
+la dirección de cada verificador cumple la misma función que fijar la clave del programa en SP1,
+ya que un verificador distinto aceptaría pruebas de otro circuito. Los tres emplean la cadena de
+referencia universal de la ceremonia Ignition, por lo que no requieren una ceremonia específica
+para cada circuito (Sección~\ref{sec:noir_flujo}).
+
+\subsection{Generación de las pruebas e integración}
+\label{sec:noir_impl_integracion}
+
+La preparación se realiza una vez por circuito. Nargo compila los tres programas, Barretenberg
+obtiene la clave de verificación de cada circuito y genera su contrato verificador, y los
+verificadores se despliegan en la cadena de destino antes que \texttt{BeaconLightClient} y
+\texttt{ReceiverZKBound}, en los que se configuran sus direcciones. La compilación del circuito de
+emparejamiento, el mayor de los tres, es la etapa más exigente de esta preparación
+(Sección~\ref{sec:resultados_etapas}). Cualquier modificación de un programa, incluida la de sus
+tamaños máximos, exige repetir estos pasos para el circuito afectado. Al inicio de cada período,
+el propietario registra el compromiso del nuevo comité mediante la función
+\lstinline|setCommittee|.
+
+Durante cada transferencia, el \textit{relayer} espera el encabezado de la cadena de baliza
+construido sobre el bloque del bloqueo y obtiene del nodo de baliza la firma del comité sobre ese
+encabezado, que el nodo ofrece durante un intervalo del orden de un \textit{slot}. Si ese intervalo
+transcurre sin que la firma se obtenga, el bloque no puede anclarse con este procedimiento. A
+continuación organiza los datos según la interfaz de cada circuito, lo que incluye completar los
+arreglos hasta sus tamaños máximos e indicar las longitudes efectivas, calcula los testigos y
+genera las tres pruebas con el ejecutable nativo \texttt{bb} y el destino \lstinline|evm|. La
+versión de Barretenberg para WebAssembly, \texttt{bb.js}, no pudo generar la prueba de inclusión,
+porque excede el límite de memoria de 32 bits de ese entorno. Si el par de raíces del bloque no
+está registrado, el \textit{relayer} envía las dos pruebas de consenso a \lstinline|update| en una
+transacción, y envía después la de inclusión a \lstinline|release| en otra. El anclaje se paga,
+por lo tanto, una vez por bloque y lo aprovechan todas las transferencias de ese bloque, mientras
+que la acuñación se paga en cada transferencia. Una ejecución que no satisface las aserciones de
+un circuito no produce testigo, de modo que esos fallos se detectan antes de generar la prueba.
 
 Las etapas de preparación, de puesta en marcha y de cada operación distinguidas en la
-Sección~\ref{sec:noir_flujo} se aplican del mismo modo a ambos circuitos, y su medición se define
-en la metodología de comparación. La sección siguiente describe la expresión de estos mismos
+Sección~\ref{sec:noir_flujo} se aplican del mismo modo a los tres circuitos, y su medición se
+define en la metodología de comparación. La sección siguiente describe la expresión de los mismos
 enunciados en SP1.

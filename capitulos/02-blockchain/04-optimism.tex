@@ -157,8 +157,8 @@ Isthmus, una tarifa del operador~\cite{opfees}. La tarifa de datos incide de man
 en el puente, puesto que las pruebas se transmiten como datos de la transacción y su tamaño se
 refleja en lo que Optimism cobra por publicarlas en Ethereum. En este trabajo se reporta el gas de
 ejecución de la verificación y el tamaño de las pruebas y de sus entradas públicas, que determinan
-la tarifa de datos, mientras que el costo monetario, que exige enviar las transacciones a la red,
-no se midió. Ambas magnitudes se complementan con el costo de generar las pruebas fuera de la
+la tarifa de datos, mientras que el costo monetario, que exige desglosar las tarifas de las
+transacciones enviadas a la red, no se midió. Ambas magnitudes se complementan con el costo de generar las pruebas fuera de la
 cadena, según se detalla en el Capítulo~\ref{chp:zkbridge}.
 
 \subsection{Pruebas de fraude}
@@ -209,8 +209,8 @@ transacción del sistema que registra en el contrato \texttt{L1Block} el número
 tiempo y el hash del bloque de Ethereum que le sirve de origen~\cite{opspecspredeploys}. El
 puente desarrollado en este trabajo no utiliza este mecanismo de forma deliberada, puesto que el
 contrato \texttt{L1Block} solo existe en las cadenas construidas con el OP Stack y el objetivo es
-que el puente pueda desplegarse en cadenas que no mantienen una relación nativa con Ethereum. La
-finalidad de Ethereum se ancla, en cambio, en un contrato de cliente ligero que solo acepta un
+que el puente pueda desplegarse en cadenas que no mantienen una relación nativa con Ethereum. El
+estado de Ethereum se ancla, en cambio, en un contrato de cliente ligero que solo acepta un
 bloque cuando una prueba de conocimiento cero demuestra tres afirmaciones. La primera es que al
 menos dos tercios del comité de sincronización firmaron el encabezado
 (Sección~\ref{sec:eth_sync_committee}). La segunda es que las claves públicas empleadas

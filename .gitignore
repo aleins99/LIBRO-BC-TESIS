@@ -34,4 +34,5 @@ _minted*/
 
 # Datos de mediciones (no se versionan)
 resultados/
+auditoria/
 main.pdf

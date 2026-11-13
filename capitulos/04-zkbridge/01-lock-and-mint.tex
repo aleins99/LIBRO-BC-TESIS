@@ -47,15 +47,17 @@ La arquitectura se compone de los siguientes elementos.
 	sin cambios respecto del prototipo de ese trabajo previo, del que deriva el repositorio
 	según su historial de versiones~\cite{figueredo2026zkbridge, zkguaranibridgesp1}.
 	\item \texttt{BeaconLightClient}, en la cadena de destino, que verifica la prueba de consenso y
-	registra como anclado el hash del bloque de ejecución que esta certifica. Su propietario fija
-	los parámetros de política que la prueba no puede validar por sí sola, que son el dominio de
-	firma, el compromiso del comité de sincronización vigente y la posición del hash del bloque en
-	el encabezado de la cadena de baliza.
-	\item \texttt{ZKReceiver}, en la cadena de destino, que verifica la prueba de inclusión, que
-	abarca la transacción de bloqueo y su recibo, y acuña los tokens. Sus funciones de acuñación son públicas, de modo que cualquier parte que disponga de
-	pruebas válidas puede invocarlas.
-	\item Un contrato verificador, en el que ambos contratos de destino delegan la comprobación
-	criptográfica de las pruebas.
+	registra como anclado el bloque de ejecución que esta certifica. Su propietario fija los
+	parámetros de política que la prueba no puede validar por sí sola, entre ellos el compromiso del
+	comité de sincronización vigente.
+	\item El contrato receptor, en la cadena de destino, que verifica la prueba de inclusión, que
+	abarca la transacción de bloqueo y su recibo, y acuña los tokens. Se denomina
+	\texttt{ZKReceiver} en la implementación en SP1 y \texttt{ReceiverZKBound} en la de Noir, y sus
+	funciones de acuñación son públicas, de modo que cualquier parte que disponga de pruebas válidas
+	puede invocarlas.
+	\item Los contratos verificadores, en los que los contratos de destino delegan la comprobación
+	criptográfica de las pruebas. SP1 emplea un único verificador común a sus dos programas, y Noir,
+	uno por circuito.
 	\item El \textit{relayer}, un proceso en Node.js que se ejecuta fuera de las cadenas, detecta los
 	bloqueos, obtiene los datos de la cadena de origen, invoca los programas que generan las pruebas
 	y envía la operación a la cadena de destino. Los contratos no le reconocen ningún permiso
@@ -65,15 +67,15 @@ La arquitectura se compone de los siguientes elementos.
 	el bloqueo y seguir los eventos de bloqueo y de acuñación.
 \end{itemize}
 
-Las pruebas establecen dos enunciados enlazados por el hash del bloque de ejecución. La prueba de
-consenso establece que el comité de sincronización firmó un encabezado de la cadena de baliza del
-que se deriva ese hash, y la prueba de inclusión, que la transacción que invoca \texttt{lock}
-pertenece al bloque cuyo encabezado produce el mismo hash y que su recibo, comprometido en ese
-mismo encabezado, registra una ejecución exitosa. Los contratos, el token, el \textit{relayer}, la interfaz y
-estos dos enunciados son comunes a las implementaciones en Noir y en SP1. La forma en que cada
-herramienta expresa y demuestra los enunciados, la codificación de sus valores públicos y el
-contrato verificador que corresponde a cada sistema de prueba se describen en las secciones
-dedicadas a cada una de ellas.
+Las pruebas establecen dos enunciados enlazados entre sí. La prueba de consenso establece que el
+comité de sincronización firmó un encabezado de la cadena de baliza del que se deriva el hash de
+un bloque de ejecución, y la prueba de inclusión, que la transacción que invoca \texttt{lock}
+pertenece a ese bloque y que su recibo, comprometido en el mismo encabezado, registra una
+ejecución exitosa. El token, el contrato \texttt{Sender}, la interfaz, el papel del
+\textit{relayer} y estos dos enunciados son comunes a las implementaciones en Noir y en SP1. Ambas
+difieren, en cambio, en la manera de repartir los enunciados entre pruebas y en los contratos que
+las consumen, diferencias que resume la Sección~\ref{sec:puente_variantes}. La descripción de
+esta sección emplea los nombres de la implementación en SP1.
 
 \begin{figure}[htbp]
 	\centering
@@ -112,8 +114,9 @@ dedicadas a cada una de ellas.
 		\draw[flecha] (receiver) -- (verif);
 		\draw[flecha] (light) -- (verif);
 	\end{tikzpicture}
-	\caption{Arquitectura del puente y recorrido de una transferencia de ida. Las líneas
-	discontinuas indican eventos y los números, las etapas descritas en el texto.}
+	\caption{Arquitectura del puente y recorrido de una transferencia de ida, con los nombres de los
+	contratos de la implementación en SP1. Las líneas discontinuas indican eventos y los números, las
+	etapas descritas en el texto.}
 	\label{fig:arquitectura_puente}
 \end{figure}
 
@@ -163,11 +166,70 @@ de ida, que se desarrolla en cinco etapas.
 	acuñación posterior.
 \end{enumerate}
 
+En la implementación en Noir, las etapas de solicitud, detección y obtención de datos son las
+mismas, pero las tres restantes se organizan de otro modo. El \textit{relayer} genera tres pruebas,
+dos de consenso y una de inclusión, envía las de consenso a \texttt{BeaconLightClient} en una
+transacción propia, si el bloque aún no está anclado, y presenta después la de inclusión al
+contrato receptor en otra transacción (Sección~\ref{sec:noir_impl_integracion}).
+
+\subsection{Diferencias entre las implementaciones}
+\label{sec:puente_variantes}
+
+Las dos implementaciones demuestran la misma firma del comité y la misma inclusión, pero la
+versión final de Noir se aparta de la de SP1 en cuatro aspectos, que la
+Tabla~\ref{tab:puente_variantes} reúne. El primero es la división de la prueba de consenso en dos
+circuitos, que se adoptó porque el circuito único no pudo compilarse en el equipo disponible
+(Sección~\ref{sec:noir_impl_consenso}). El segundo es el dato que enlaza el consenso con la
+inclusión, que en SP1 es el hash del bloque de ejecución y en Noir el par formado por las raíces
+de transacciones y de recibos de ese bloque, extraídas del encabezado dentro del circuito del
+comité. El tercero es la comprobación del evento \texttt{Locked}, que solo realiza el circuito de
+inclusión de Noir y que no altera la seguridad del puente (Sección~\ref{sec:noir_impl_inclusion}).
+El cuarto es la organización de las transacciones de destino, ya que SP1 puede anclar y acuñar en
+una sola transacción, mientras que Noir lo hace siempre en dos. Ninguna de estas diferencias
+modifica las propiedades que el puente garantiza ni los supuestos de confianza descritos en la
+Sección~\ref{sec:puente_aceptacion}, pero todas inciden en el costo de verificación, lo que se
+tiene en cuenta al comparar los resultados (Sección~\ref{sec:metodologia_validez}).
+
+\begin{table}[htbp]
+	\centering
+	\caption{Diferencias entre las implementaciones del puente en SP1 y en Noir.}
+	\label{tab:puente_variantes}
+	\footnotesize
+	\begin{tabular}{>{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}p{5.8cm}
+		>{\raggedright\arraybackslash}p{5.8cm}}
+		\toprule
+		\textbf{Aspecto} & \textbf{SP1} & \textbf{Noir} \\
+		\midrule
+		Prueba de consenso & Un programa y una prueba. & Dos circuitos, del comité y de
+		emparejamiento, enlazados por un valor público. \\
+		\addlinespace
+		Compromiso del comité & SHA-256 de las claves concatenadas. & Poseidon2 de las claves. \\
+		\addlinespace
+		Enlace entre consenso e inclusión & Hash del bloque de ejecución. & Par de raíces de
+		transacciones y de recibos. \\
+		\addlinespace
+		Prueba de inclusión & Reconstruye los árboles completos y el receptor decodifica la llamada.
+		& Verifica las ramas, decodifica la llamada y comprueba el evento \texttt{Locked}. \\
+		\addlinespace
+		Datos de tamaño variable & Sin máximos fijos. & Transacción de hasta 256 bytes, recibo de
+		hasta 784 y ramas de hasta seis nodos. \\
+		\addlinespace
+		Contratos verificadores & Uno, común a ambos programas. & Tres, uno por circuito. \\
+		\addlinespace
+		Transacciones de destino & Anclaje y acuñación en una o dos transacciones. & Anclaje y
+		acuñación siempre en dos transacciones. \\
+		\addlinespace
+		Protección contra la reutilización & Hash del bloque y posición de la transacción. &
+		Identificador del bloqueo. \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
 \subsection{Condiciones de aceptación y modelo de confianza}
 \label{sec:puente_aceptacion}
 
-\texttt{BeaconLightClient} solo ancla un bloque cuando el contrato verificador acepta la prueba de
-consenso para la clave del programa correspondiente, la prueba declara válida la firma, condición
+En la implementación en SP1, \texttt{BeaconLightClient} solo ancla un bloque cuando el contrato
+verificador acepta la prueba de consenso para la clave del programa correspondiente, la prueba declara válida la firma, condición
 que el programa solo establece si la firma agregada y la rama de Merkle son correctas y
 participaron en ella más de dos tercios de los miembros del comité, y el dominio, la posición del
 hash y el compromiso del comité coinciden con los fijados por el propietario. \texttt{ZKReceiver}, por su parte, solo acuña cuando el verificador acepta la
@@ -177,7 +239,9 @@ de la misma posición pertenece al árbol de recibos de ese encabezado y registr
 exitosa, el hash de ese encabezado está anclado, la transacción se dirigió al contrato \texttt{Sender}, los datos de
 la llamada coinciden en longitud y en hash con los comprometidos por la prueba y corresponden a
 una llamada a \texttt{lock} con una dirección bien formada y un monto positivo, y el par formado
-por el hash del bloque y la posición de la transacción no se procesó antes.
+por el hash del bloque y la posición de la transacción no se procesó antes. En la implementación
+en Noir, las condiciones equivalentes recaen sobre el par de raíces registrado y sobre el
+identificador del bloqueo, y se detallan en la Sección~\ref{sec:noir_impl_publicas}.
 
 Estas condiciones respaldan algunas de las afirmaciones que distingue la
 Sección~\ref{sec:circom_limitaciones}, pero no todas. La inclusión de la transacción y la
@@ -191,7 +255,7 @@ tokens quedaron en custodia y que se emitió el evento \texttt{Locked}~\cite{zkg
 ozerc20}. El destinatario y el monto
 se extraen de los datos de la transacción probada, por lo que el \textit{relayer} no puede
 alterarlos. La reutilización de una operación se impide mediante el
-registro de los pares ya procesados. La autenticidad del encabezado, en cambio, depende de la
+registro de las operaciones ya procesadas. La autenticidad del encabezado, en cambio, depende de la
 honestidad de la mayoría del comité de sincronización y de que el propietario de
 \texttt{BeaconLightClient} mantenga actualizado el compromiso del comité, que se renueva cada 256
 épocas~\cite{ethconsensusaltair}. Según la documentación de la revisión examinada, la rotación del
@@ -200,16 +264,17 @@ ancla cualquier bloque con una firma válida aunque no esté finalizado~\cite{zk
 y los supuestos del sistema de prueba que lo sustenta, incluida la configuración confiable cuando
 existe (Sección~\ref{sec:snarks_starks}).
 
-El papel del \textit{relayer} admite, en consecuencia, varias distinciones. Los contratos de
+El papel del \textit{relayer} admite varias distinciones. Los contratos de
 destino no le otorgan un permiso exclusivo, ya que \lstinline|updateHeader|,
-\lstinline|mintRemote| y \lstinline|mintRemoteWithHeader| pueden ser invocadas por cualquier
-parte. Las comprobaciones de \texttt{ZKReceiver} y de los programas probados impiden, por su parte,
+\lstinline|mintRemote| y \lstinline|mintRemoteWithHeader| en SP1, y \lstinline|update| y
+\lstinline|release| en Noir, pueden ser invocadas por cualquier parte. Las comprobaciones de \texttt{ZKReceiver} y de los programas probados impiden, por su parte,
 que quien presenta las pruebas determine el bloque, la transacción, el destinatario o el monto al
 margen de lo que estas comprometen, o que reutilice una operación ya procesada. Exigen, además,
 que el bloqueo se haya ejecutado con éxito, de modo que una llamada a \texttt{lock} incluida pero
 revertida no permite acuñar. La detección del evento \texttt{Locked} por el \textit{relayer}
-habitual es una condición de su propio funcionamiento y no una exigencia del receptor, que se
-apoya en el recibo probado y no en el evento. Esas comprobaciones no verifican, sin embargo, la
+habitual es una condición de su propio funcionamiento. En SP1, el receptor no exige el evento y se
+apoya en el recibo probado, mientras que en Noir el circuito de inclusión lo comprueba como control
+adicional y obtiene de él el identificador del bloqueo. Esas comprobaciones no verifican, sin embargo, la
 finalidad del bloque, de modo que no distinguen un bloque firmado que no llegue a finalizarse de
 uno final.
 Finalmente, el \textit{relayer} sigue siendo relevante para la disponibilidad del servicio, puesto

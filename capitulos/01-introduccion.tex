@@ -19,11 +19,11 @@ teórico hasta convertirse en una herramienta de ingeniería aplicable a problem
 tecnología permite comprimir la verificación de un cómputo arbitrariamente extenso en una prueba
 sucinta, cuya validación puede realizarse en una fracción del tiempo y del costo que exigiría
 reejecutar dicho cómputo. Aplicada al contexto de Ethereum, esta propiedad habilita la
-verificación liviana, desde otra cadena, tanto del consenso alcanzado por los validadores —a
-través de la firma emitida por el comité de sincronización que certifica la finalidad de un
-bloque— como de la inclusión efectiva de una transacción particular dentro de ese bloque, lo
-cual se logra mediante una prueba sobre su árbol de Merkle-Patricia. La combinación de ambas
-verificaciones, comprimidas en una única prueba de conocimiento cero, constituye el fundamento
+verificación liviana, desde otra cadena, tanto del consenso alcanzado por los validadores, a
+través de la firma con que el comité de sincronización autentica los encabezados de bloque, como
+de la inclusión efectiva de una transacción particular dentro de un bloque, lo cual se logra
+mediante una prueba sobre su árbol de Merkle-Patricia. La combinación de ambas verificaciones,
+expresadas mediante pruebas de conocimiento cero, constituye el fundamento
 técnico sobre el que resulta posible construir un puente entre cadenas cuya seguridad no dependa
 de la honestidad de un intermediario, sino de una demostración matemáticamente verificable. En
 el presente trabajo, este fundamento se materializa mediante el diseño e implementación de un
@@ -112,16 +112,34 @@ ventajas significativas en términos de flexibilidad de desarrollo y de tiempos 
 frente a un lenguaje de conocimiento cero de dominio específico como Noir, al implementar la
 verificación de consenso e inclusión de transacciones en Ethereum?
 
+A partir de esta pregunta se plantea la siguiente hipótesis. Al implementar la verificación de
+consenso e inclusión de transacciones de Ethereum, SP1 presenta ventajas significativas frente a
+Noir en la flexibilidad de desarrollo y en los tiempos de generación de las pruebas. Una ventaja se
+considera significativa en sentido práctico, es decir, cuando la diferencia observada equivale a
+varias veces el valor de la otra herramienta o modifica la viabilidad de una tarea de desarrollo u
+operación, y no en
+sentido estadístico, ya que cada medición se realizó una sola vez. El costo de verificación en la
+cadena de destino se mide y se compara de forma descriptiva, sin formar parte de la hipótesis.
+
 \section{Delimitación}
 
 El presente trabajo se circunscribe a la arquitectura de consenso de Ethereum posterior a
-\textit{The Merge}, particularmente al mecanismo del comité de sincronización empleado por los
-clientes ligeros para certificar la finalidad de un bloque, así como a las pruebas de inclusión
-sobre su árbol de Merkle-Patricia. Las implementaciones desarrolladas y las comparativas de
-rendimiento realizadas se validan sobre redes de prueba, empleando Ethereum Sepolia como cadena
-de origen y Optimism Sepolia como cadena de destino, bajo una infraestructura de cómputo
-estandarizada que permite que las mediciones obtenidas para Noir y para SP1 resulten
-comparables entre sí. Quedan fuera del alcance de este trabajo tanto la implementación sobre
+\textit{The Merge}, en particular al mecanismo del comité de sincronización que emplean los
+clientes ligeros para autenticar los encabezados de bloque, así como a las pruebas de inclusión
+sobre los árboles de Merkle-Patricia de transacciones y de recibos. El puente verifica la
+autenticidad del encabezado y la inclusión de la operación, pero no la finalidad del bloque. Las
+implementaciones emplean Ethereum Sepolia como cadena de origen y Optimism Sepolia como cadena de
+destino. La versión final del puente con Noir completó transferencias reales entre ambas redes,
+con verificación en la cadena de destino de la firma del comité y de la inclusión de cada
+operación. De la implementación en SP1 se comprobó en Optimism Sepolia el contrato verificador,
+pero no el recorrido completo de una transferencia.
+
+Las mediciones comparativas de la generación de pruebas se realizaron en un mismo servidor, sobre
+la versión del programa de consenso disponible en ese momento, cuyo enunciado en Noir es menor que
+el de SP1. Esa y las demás diferencias entre las mediciones se documentan en la
+Sección~\ref{sec:metodologia_validez}. Los circuitos finales de Noir se midieron posteriormente en
+otro equipo y sus resultados se presentan por separado, y no todas las etapas pudieron compararse,
+en particular la envoltura Groth16 de SP1 y la generación de las pruebas de inclusión. Quedan fuera del alcance de este trabajo tanto la implementación sobre
 redes principales como la verificación de mecanismos de consenso correspondientes a cadenas
 distintas de Ethereum.
 

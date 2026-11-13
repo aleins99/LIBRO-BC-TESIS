@@ -11,7 +11,8 @@ su contraste con los valores derivados de la Sección~\ref{sec:resultados}.
 La Tabla~\ref{tab:apendice_entorno} resume los equipos y las herramientas empleados en cada grupo
 de mediciones. Las etapas de generación de ambas herramientas se midieron en el mismo servidor,
 mientras que las mediciones de gas se realizaron en redes locales, con comprobaciones adicionales
-sobre Optimism Sepolia en el caso de SP1.
+sobre Optimism Sepolia, que en el caso de Noir incluyen las transferencias completas del puente
+(Sección~\ref{sec:apendice_testnet}).
 
 \begin{table}[htbp]
 	\centering
@@ -53,7 +54,8 @@ sobre Optimism Sepolia en el caso de SP1.
 		\texttt{SP1VerifierGroth16} v6.1.0 de \texttt{sp1-contracts}, commit
 		\texttt{d3629729}~\cite{sp1contracts} \\
 		\addlinespace
-		Red pública & Ethereum Sepolia, solo como cadena de origen de la ejecución de punta a punta & Optimism Sepolia, identificador 11155420, bloque
+		Red pública & Ethereum Sepolia como origen y Optimism Sepolia, identificador 11155420, como
+		destino de las transferencias del 13 de noviembre de 2026 & Optimism Sepolia, identificador 11155420, bloque
 		51\,307\,662, verificador desplegado en
 		\texttt{0xb69f2584CBcFf99a}\allowbreak\texttt{58C4e7002E8b89Af54a6f4e2} \\
 		\addlinespace
@@ -197,7 +199,8 @@ llamada con una unidad de gas menos falló.
 \end{table}
 
 La Tabla~\ref{tab:apendice_circuitos_noir} detalla las características de los circuitos de Noir
-que integran el puente y de sus contratos verificadores. En la ejecución de punta a punta, la
+que integran el puente y de sus contratos verificadores. En la ejecución de punta a punta con
+destino en la red local, la
 transacción de bloqueo en Ethereum Sepolia fue
 \texttt{0xcc943f29e0b5973be022}\allowbreak\texttt{92d2f9f4e0615a49bd584d}\allowbreak\texttt{9e7a784f363cd4df8a73d3},
 incluida en la posición 97 del bloque 12\,122\,052, y la firma del comité correspondió al
@@ -226,6 +229,7 @@ de recibos alcanzaba 4,94 millones de compuertas, lo que lo habría llevado a $2
 		Gas de la verificación, Osaka & 4\,489\,878 & 4\,578\,014 & 4\,745\,084 \\
 		Gas de la verificación, Prague & 3\,077\,258 & 3\,133\,115 & 3\,332\,963 \\
 		Tiempo de generación de la prueba & 23 s & 75 s & 23 s \\
+		Memoria de la generación & No medida & 12,9 GB & 6,7 GB \\
 		Tiempo de compilación & 78 s & 32 min & No informado \\
 		\bottomrule
 	\end{tabular}
@@ -239,3 +243,75 @@ de recibos alcanzaba 4,94 millones de compuertas, lo que lo habría llevado a $2
 		circuito de emparejamiento es ese mismo valor de enlace.
 	\end{minipage}
 \end{table}
+
+\subsection{Transferencias en Optimism Sepolia}
+\label{sec:apendice_testnet}
+
+El puente de Noir se desplegó en Optimism Sepolia el 13 de noviembre de 2026. El
+\textit{relayer} se ejecutó en el computador Mac de 18 GB de memoria, obtuvo los datos de consenso
+de un nodo de baliza público y generó las tres pruebas con los ejecutables nativos de Nargo y de
+Barretenberg, mientras que la interfaz web se ejecutó en un contenedor. La
+Tabla~\ref{tab:apendice_testnet_contratos} indica las direcciones de los contratos y la
+Tabla~\ref{tab:apendice_testnet} las transacciones de las tres transferencias completadas. El
+compromiso del comité del período 1412 se registró en la transacción
+\texttt{0x2d2104a98565669778b9d7}\allowbreak\texttt{c2448ed7a267fa40ec8142}\allowbreak\texttt{f655442ad213caed7521}.
+El bloqueo rechazado, de 10 GUA, corresponde a la transacción
+\texttt{0xe10447f1e22141f18d29e9}\allowbreak\texttt{9d6600c904958e95dc3059}\allowbreak\texttt{e0dfcea5d3431695cf8c},
+cuyo bloque se ancló en la transacción
+\texttt{0x538b773a6cbe9509374dc0}\allowbreak\texttt{079684e4e5d834c599fc5f}\allowbreak\texttt{4352c7f2a981fcbc799e},
+con 9\,082\,811 unidades de gas. La operación \lstinline|lock| consumió 63\,814 unidades en
+Ethereum Sepolia.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Contratos del puente de Noir desplegados en las redes de prueba.}
+	\label{tab:apendice_testnet_contratos}
+	\footnotesize
+	\begin{tabular}{>{\raggedright\arraybackslash}p{2.3cm} >{\raggedright\arraybackslash}p{3.9cm} >{\raggedright\arraybackslash}p{8.4cm}}
+		\toprule
+		\textbf{Red} & \textbf{Contrato} & \textbf{Dirección} \\
+		\midrule
+		Ethereum Sepolia & \texttt{GuaraniToken} & \texttt{0xEC89b791019C2B4E40Fe909CD37c11c5A84a1BEe} \\
+		Ethereum Sepolia & \texttt{Sender} & \texttt{0x4D31bB1A4B70D6dD4c57b01CBbcEE5402d85A0e9} \\
+		Optimism Sepolia & \texttt{BeaconLightClient} & \texttt{0xEB70f9f8c994A10E49973302d86A27278A488047} \\
+		Optimism Sepolia & \texttt{CommitteeVerifier} & \texttt{0x2d031719AB5ca6Ef4d8EDeEc38A4D9Ff4a541905} \\
+		Optimism Sepolia & \texttt{PairingVerifier} & \texttt{0xAe4c2F0246F4c9748A4F418816e0f313A1BFa68a} \\
+		Optimism Sepolia & \texttt{TxInclusionVerifier} & \texttt{0x72D8dbD60Da0B05857aaF6278833ff023191D7b4} \\
+		Optimism Sepolia & \texttt{ReceiverZKBound} & \texttt{0xFd2D4d70e90bDC1589Ec158f9f1BE30342a9BAE9} \\
+		Optimism Sepolia & \texttt{GuaraniToken} & \texttt{0x76D97779086092cd185b1104200Ec4B571538d0F} \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+	\centering
+	\caption{Transferencias completadas entre Ethereum Sepolia y Optimism Sepolia.}
+	\label{tab:apendice_testnet}
+	\scriptsize
+	\begin{tabular}{>{\raggedright\arraybackslash}p{0.4cm} >{\raggedleft\arraybackslash}p{1.1cm} >{\raggedright\arraybackslash}p{4.2cm} >{\raggedright\arraybackslash}p{4.0cm} >{\raggedleft\arraybackslash}p{1.5cm} >{\raggedleft\arraybackslash}p{1.5cm}}
+		\toprule
+		\textbf{Id} & \textbf{Monto} & \textbf{Bloqueo y anclaje} & \textbf{Acuñación} &
+		\textbf{Gas del\newline anclaje} & \textbf{Duración} \\
+		\midrule
+		10 & 10 GUA & \texttt{0xbf54552dd2a814d45563f3}\allowbreak\texttt{43b0688dba5b9dfe8d9273}\allowbreak\texttt{ad6e3a2988c43b418ad6}, bloque 12\,127\,160, posición 3; anclaje
+		\texttt{0x6d5294c1aa4eb74ca7b3ce}\allowbreak\texttt{c5cac579333dd987f4affd}\allowbreak\texttt{f73dda48f00c8445f2af}
+		& \texttt{0xd098ab4fe5d32cc052ff89}\allowbreak\texttt{94e7bc6ca17fbe3ab7280c}\allowbreak\texttt{8a6c96d856e4aac2df66}, bloque 51\,392\,520 & 9\,082\,955 & 3 min 36 s \\
+		\addlinespace
+		11 & 10 GUA & \texttt{0x9ae3e51363c726deddbb09}\allowbreak\texttt{d33b87375ff4e046c00575}\allowbreak\texttt{a278c784706a5c970469}, bloque 12\,127\,271, posición 95; anclaje
+		\texttt{0x885920930c0c4a402fd63d}\allowbreak\texttt{e1aacf11950a1e8baa987c}\allowbreak\texttt{45fc4d83f63555e2439c}
+		& \texttt{0xe9f6040178f1b1947260d0}\allowbreak\texttt{3cbd0bc2440e3d8ab11405}\allowbreak\texttt{22cbb4126ccdb9e0a37e}, bloque 51\,393\,180 & 9\,082\,631 & 3 min 24 s \\
+		\addlinespace
+		12 & 1 GUA & \texttt{0x01d6f11ab5e87259622fc8}\allowbreak\texttt{955c3c948576e17618f801}\allowbreak\texttt{076042627a95745259b4}, bloque 12\,127\,356, posición 63; anclaje
+		\texttt{0x3277c09ab9cd6b4bc074cf}\allowbreak\texttt{3368b66da9c4468616b0c2}\allowbreak\texttt{027ef79080aaad8e820d}
+		& \texttt{0x935a221e585fadd8155fd8}\allowbreak\texttt{de18e3b88f5033e65adf2b}\allowbreak\texttt{817c87bf7cd610532f0b}, bloque 51\,393\,695 & 9\,082\,751 & 3 min 22 s \\
+		\bottomrule
+	\end{tabular}
+
+	\vspace{0.5em}
+	\begin{minipage}{0.95\textwidth}
+		\scriptsize
+		La duración corresponde al intervalo entre la transacción de bloqueo y la de acuñación. El
+		gas de \lstinline|release| varió entre 4\,856\,226 y 4\,873\,410 unidades.
+	\end{minipage}
+\end{table}
+
