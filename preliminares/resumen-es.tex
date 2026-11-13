@@ -1,9 +1,9 @@
 \centerline{\textbf{\large Verificación de consenso e inclusión de transacciones en Ethereum}}
 \centerline{\textbf{\large con conocimiento cero aplicado a la transferencia de activos digitales}}
 
-\vspace{2cm}
+\vspace{1.5cm}
 
-\rightline{Autor: Javier López - Alejandro Marín}
+\rightline{Autores: Javier López - Alejandro Marín}
 \vspace{0.5cm}
 \rightline{Asesor: PhD Marcos Villagra}
 
@@ -15,32 +15,33 @@
 \vspace{0.5cm}
 
 \noindent
-Los puentes entre cadenas o popularmente conocidos como \textit{cross-chain bridges}, permiten 
-transferir activos entre distintas \textit{blockchains} y constituyen una pieza central de la 
-interoperabilidad. La mayoría se apoya en el patrón \textit{lock-and-mint} operado por un 
-\textit{relayer} de confianza, un actor que tras observar el bloqueo de fondos en la cadena 
-de origen acuña el equivalente en la cadena de destino. Como toda la seguridad recae en ese 
-operador, que podría acuñar de forma fraudulenta, los puentes se han vuelto uno de los blancos 
-más explotados del ecosistema. 
+Los puentes entre cadenas (\textit{cross-chain bridges}) permiten transferir activos entre
+distintas \textit{blockchains} y constituyen una pieza central de la interoperabilidad. La mayoría
+se apoya en el patrón \textit{lock-and-mint} operado por un \textit{relayer} de confianza, un
+actor que, tras observar el bloqueo de fondos en la cadena de origen, acuña el equivalente en la
+cadena de destino. Como toda la seguridad recae en ese operador, que podría acuñar de forma
+fraudulenta, los puentes se han vuelto uno de los blancos más explotados del ecosistema.
 En este trabajo se diseña e implementa un puente de confianza reducida
 (\textit{trust-minimized}) que sustituye esa confianza por verificación criptográfica. El
-contrato de destino solo acuña cuando valida \textit{on-chain} una prueba de conocimiento cero
-(\textit{zero-knowledge}). La prueba acredita que la transacción de bloqueo fue incluida en el
-bloque anclado y que el recibo de esa misma posición registra una ejecución exitosa. El receptor
-verifica que la transacción invoca \texttt{lock} en \texttt{Sender} y obtiene de los datos de la
-llamada el destinatario y el monto que se acuñará. Estas comprobaciones no acreditan la finalidad
-del bloque. La lógica de verificación se desarrolló en Noir y, de forma equivalente,
+contrato de destino solo acuña cuando valida \textit{on-chain} pruebas de conocimiento cero
+(\textit{zero-knowledge}). La prueba de consenso acredita que la firma agregada del comité de
+sincronización (\textit{sync committee}) de Ethereum respalda el encabezado atestiguado del que se
+deriva el hash del bloque anclado. La prueba de inclusión acredita que la transacción de bloqueo
+pertenece a ese bloque y que el recibo de la misma posición registra una ejecución exitosa. El
+receptor verifica que la transacción invoca \texttt{lock} en \texttt{Sender} y obtiene de los
+datos de la llamada el destinatario y el monto que se acuñará. Estas comprobaciones no acreditan
+la finalidad del bloque. La lógica de verificación se desarrolló en Noir y, de forma equivalente,
 en Rust para la máquina virtual de conocimiento cero SP1, con verificadores \textit{on-chain} en
-Solidity, y ambas implementaciones se comparan empíricamente en rendimiento, costo de
-verificación y viabilidad práctica. Un \textit{relayer} \textit{off-chain} construye las pruebas
-de consenso y de inclusión de cada operación y las remite al contrato de destino, donde deja de
-ser un acuñador de confianza y pasa a ser un probador sin permisos, ya que cualquiera con
-pruebas válidas puede liberar los fondos y nadie puede acuñar sin ellas. De manera complementaria se diseña la
-validación de la firma del comité de sincronización (\textit{sync committee}) de Ethereum como
-raíz de confianza sobre la finalidad del bloque. La solución se validó sobre redes de prueba reales, con Ethereum
-Sepolia como cadena de origen y Optimism Sepolia como destino. Adicionalmente incluye una interfaz web y un
-modo comparativo que evidencia de forma experimental cómo el esquema clásico admite la
-acuñación fraudulenta mientras que el esquema con verificación de conocimiento cero la rechaza.
+Solidity. El \textit{relayer} \textit{off-chain} que construye y remite las pruebas deja de ser
+un acuñador de confianza y pasa a ser un probador sin permisos, ya que cualquiera con pruebas
+válidas puede solicitar la acuñación y nadie puede acuñar sin ellas. En las condiciones
+evaluadas, Noir generó cada prueba del programa de consenso unas 5,7 veces más rápido una vez
+compilado el circuito, mientras que SP1 ofreció mayor flexibilidad de desarrollo y un costo de
+verificación criptográfica \textit{on-chain} entre 17 y 18 veces menor que el de cada prueba
+UltraHonk de Noir. La transferencia completa se ejecutó desde
+Ethereum Sepolia hacia una red local con las reglas de Optimism Sepolia. El prototipo incluye,
+además, una interfaz web y un modo comparativo que muestra cómo el esquema clásico admite la
+acuñación fraudulenta, mientras que el esquema con verificación de conocimiento cero la rechaza.
 
 \vspace{0.5cm}
 

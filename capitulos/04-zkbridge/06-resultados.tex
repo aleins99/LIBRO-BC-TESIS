@@ -179,8 +179,9 @@ etapas de generación del programa de inclusión de SP1 tampoco se midieron.
 \subsection{Costo en frío y amortización}
 \label{sec:resultados_amortizacion}
 
-La obtención de la primera prueba desde el código fuente demandó 92,3 minutos en Noir y
-17,9 minutos en SP1, de modo que, para una única prueba, SP1 resulta unas cinco veces más rápido.
+Con las etapas medidas, la obtención de la primera prueba demandó 92,3 minutos en Noir y
+17,9 minutos en SP1, cuyo ejecutable ya estaba compilado (Sección~\ref{sec:metodologia_validez}),
+por lo que, para una única prueba, SP1 resulta unas cinco veces más rápido.
 Esta comparación, sin embargo, no representa la operación del puente, en la que el mismo programa
 genera una prueba por cada anclaje. La Tabla~\ref{tab:resultados_amortizacion} separa los costos
 fijos de los costos por prueba según la Tabla~\ref{tab:metodologia_etapas}. El costo por prueba de
@@ -209,7 +210,7 @@ solo la generación de la prueba, la diferencia es de unas 12,2 veces.
 \end{table}
 
 Al sustituir estos valores en la Ecuación~\eqref{eq:punto_equilibrio} se obtiene
-$n^{*} \approx 6{,}3$, de modo que, a partir de la séptima prueba generada con un mismo programa,
+$n^{*} \approx 6{,}3$. A partir de la séptima prueba generada con un mismo programa,
 el tiempo total acumulado de Noir resulta inferior al de SP1. La
 Figura~\ref{fig:resultados_equilibrio} representa ambas rectas. Este punto corresponde al circuito
 de Noir medido en el servidor, por lo que el de los circuitos que integran el puente, que demuestran
@@ -365,7 +366,7 @@ costos. La diferencia entre el gas del anclaje y la suma de sus dos verificacion
 14\,811 unidades, y la verificación de inclusión equivale al 97,4\,\% del gas de la acuñación, cuya
 diferencia, de 128\,074 unidades, aproxima el costo de los controles y de la acuñación. El anclaje
 utiliza el 54,1\,\% del límite de 16\,777\,216 unidades por transacción que establece la propuesta
-EIP-7825~\cite{eip7825}, de modo que el diseño en dos pruebas cabe en una sola transacción. La comprobación del árbol de
+EIP-7825~\cite{eip7825}, por lo que el diseño en dos pruebas cabe en una sola transacción. La comprobación del árbol de
 transacciones, que se incorporó a la prueba de inclusión después de la del árbol de recibos,
 incrementó el gas de la acuñación en 59\,465 unidades, desde 4\,813\,693, principalmente por las
 32 entradas públicas que añade la raíz de transacciones.
@@ -418,7 +419,7 @@ comprobaron también los precios de la suma y de la multiplicación escalar sobr
 Fiat-Shamir, verifica el protocolo \textit{sumcheck}, cuyo número de rondas crece con el logaritmo
 del tamaño del circuito, y procesa cada entrada pública (Sección~\ref{sec:noir_impl_publicas}). Los
 circuitos del comité y de inclusión tienen el mismo tamaño, de $2^{22}$ filas, y pruebas de igual
-longitud, de modo que la diferencia de 255\,206 unidades entre sus verificaciones se atribuye a las
+longitud, por lo que la diferencia de 255\,206 unidades entre sus verificaciones se atribuye a las
 161 entradas públicas adicionales del segundo, a razón de unas 1\,585 unidades por entrada,
 incluido el costo de sus 32 bytes de datos. El circuito de emparejamiento duplica el tamaño del
 circuito del comité con seis entradas menos, y su verificación cuesta 88\,136 unidades más, lo que
@@ -475,7 +476,8 @@ partir de la firma del comité en el \textit{slot} 11\,565\,990, con la particip
 miembros. La cadena de destino fue una red local de Anvil con las reglas posteriores a Osaka, en la
 que el propietario registró el compromiso del comité del período 1411 mediante
 \lstinline|setCommittee|. Ambas transacciones fueron aceptadas y el destinatario recibió los
-42 GUA. Las 33 pruebas automatizadas de los contratos y las 30 del circuito de inclusión
+42 GUA. Esta ejecución acredita el flujo completo desde una red pública de origen hacia una red
+local de destino, y no una transferencia entre dos redes públicas. Las 33 pruebas automatizadas de los contratos y las 30 del circuito de inclusión
 concluyeron con éxito, incluidas las de rechazo descritas en la Sección~\ref{sec:metodologia_gas}.
 En el circuito del comité, con datos reales, se comprobó además el rechazo de una participación
 inferior a dos tercios, de una clave ajena al comité y de raíces de transacciones o de recibos
@@ -500,7 +502,7 @@ puesto que el circuito compilado y la clave de verificación se conservan como a
 que genera las pruebas necesita entonces unos 19 GiB de memoria en el circuito medido, y los
 circuitos que integran el puente se probaron en un equipo de 18 GB, aunque la memoria máxima de
 esa generación no se midió. En SP1, el pico corresponde a
-cada generación de prueba, de modo que el equipo del \textit{relayer} debe disponer en todo momento
+cada generación de prueba, por lo que el equipo del \textit{relayer} debe disponer en todo momento
 de una memoria del orden de 90 GiB. Este requisito incide directamente en el costo de la máquina en
 la nube que opera el puente.
 

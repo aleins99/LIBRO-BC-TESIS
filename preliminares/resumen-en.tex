@@ -21,23 +21,23 @@ trusted relayer, an actor that, after observing a lock of funds on the source ch
 equivalent amount on the destination chain. Since all security rests on that operator, which could
 mint fraudulently, bridges have become one of the most exploited targets of the ecosystem. This
 work designs and implements a trust-minimized bridge that replaces that trust with cryptographic
-verification. The destination contract mints only when it validates a zero-knowledge proof
-on-chain. The proof attests that the lock transaction was included in the anchored block and that
-the receipt at that same position records a successful execution. The receiver verifies that the
-transaction invokes \texttt{lock} on \texttt{Sender} and obtains the recipient and the amount to
-be minted from the call data. These checks do not attest to the finality of the block. The
-verification logic was developed in Noir and, equivalently, in Rust for the SP1 zero-knowledge
-virtual machine, with on-chain verifiers in Solidity, and both implementations are compared
-empirically in terms of performance, verification cost and practical viability. An off-chain
-relayer builds the consensus and inclusion proofs for each operation and submits them to the
-destination contract, where it ceases to be a trusted minter and becomes a permissionless prover,
-since anyone with valid proofs can release the funds and no one can mint without them.
-Complementarily, the validation of the signature of the Ethereum sync committee is designed as the
-root of trust over the finality of the block. The solution was validated on real test networks,
-with Ethereum Sepolia as the source chain and Optimism Sepolia as the destination chain. It
-additionally includes a web interface and a comparative mode that experimentally shows how the
-classic scheme admits fraudulent minting, whereas the scheme with zero-knowledge verification
-rejects it.
+verification. The destination contract mints only when it validates zero-knowledge proofs
+on-chain. The consensus proof attests that the aggregate signature of the Ethereum sync committee
+supports the attested header from which the hash of the anchored block is derived. The inclusion
+proof attests that the lock transaction belongs to that block and that the receipt at the same
+position records a successful execution. The receiver verifies that the transaction invokes
+\texttt{lock} on \texttt{Sender} and obtains the recipient and the amount to be minted from the
+call data. These checks do not attest to the finality of the block. The verification logic was
+developed in Noir and, equivalently, in Rust for the SP1 zero-knowledge virtual machine, with
+on-chain verifiers in Solidity. The off-chain relayer that builds and submits the proofs ceases to
+be a trusted minter and becomes a permissionless prover, since anyone with valid proofs can
+request the minting and no one can mint without them. Under the evaluated conditions, Noir
+generated each proof of the consensus program about 5.7 times faster once the circuit was
+compiled, whereas SP1 offered greater development flexibility and an on-chain cryptographic
+verification cost between 17 and 18 times lower than that of each UltraHonk proof of Noir. The complete transfer was executed from Ethereum Sepolia to a local
+network with the rules of Optimism Sepolia. The prototype also includes a web interface and a
+comparative mode that shows how the classic scheme admits fraudulent minting, whereas the scheme
+with zero-knowledge verification rejects it.
 
 \vspace{0.5cm}
 

@@ -449,10 +449,11 @@ Dicha variante omite la prueba que vincula el encabezado finalizado, representad
 discontinuo en la figura, y parte directamente del encabezado firmado por el comité, de modo que
 el bloque anclado no se exige finalizado. A partir de ese encabezado, el prototipo demuestra la
 inclusión de la transacción de bloqueo en el árbol de transacciones y la pertenencia de su recibo
-al árbol de recibos, exige que el código de estado del recibo indique una ejecución exitosa y
-comprueba que el evento de bloqueo fue emitido por el contrato emisor del puente y no por otro
-contrato. El identificador del depósito, el destinatario y el monto quedan así vinculados a la
-prueba, y cada identificador solo puede acuñarse una vez.
+al árbol de recibos, y exige que el código de estado del recibo indique una ejecución exitosa. El
+destinatario y el monto no se leen del evento, sino de los datos de la llamada a \texttt{lock}
+sobre el contrato emisor del puente, cuyo hash compromete la prueba, y cada par formado por el
+hash del bloque y la posición de la transacción solo puede acuñarse una vez
+(Sección~\ref{sec:puente_aceptacion}).
 
 Cada eslabón de esta cadena es verificable de manera determinista, de modo que la validez del
 evento queda reducida a la validez de la firma del comité. Sin embargo, ejecutar esta

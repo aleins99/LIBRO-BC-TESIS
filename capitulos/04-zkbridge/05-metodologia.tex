@@ -102,7 +102,7 @@ intérprete de órdenes que lanzó cada proceso y no las del proceso medido, por
 Ambas implementaciones se midieron en el mismo servidor, una máquina virtual de Oracle Cloud
 Infrastructure de la forma \texttt{VM.Standard3.Flex} con sistema operativo Linux, configurada con
 7 OCPU y 90 GB de memoria. En esta forma, cada OCPU corresponde a un núcleo físico del procesador
-con dos hilos de ejecución~\cite{ocicomputeshapes}, de modo que el servidor disponía de 14 hilos y
+con dos hilos de ejecución~\cite{ocicomputeshapes}. El servidor disponía, así, de 14 hilos, y
 el porcentaje de uso del procesador podía alcanzar, como máximo, el 1400\,\%. El servidor contaba
 además con 150 GB de almacenamiento dedicados al área de intercambio, que el sistema operativo
 emplea como extensión de la memoria cuando un proceso supera la memoria física disponible. La
@@ -123,7 +123,7 @@ como referencia del costo de ejecución sin probador.
 El costo de verificación se midió como el gas de ejecución de las transacciones que verifican las
 pruebas en contratos desplegados en redes locales. Esta magnitud no depende del precio del gas
 (Sección~\ref{sec:eth_gas}) e incluye el costo intrínseco de la transacción, de 21\,000 unidades,
-y el de sus datos, de modo que cada cifra representa una transacción completa. Las mediciones se
+y el de sus datos, por lo que cada cifra representa una transacción completa. Las mediciones se
 realizaron en noviembre de 2026.
 
 El gas de una misma transacción depende de las reglas de la versión de la EVM que aplica la red. La
