@@ -36,12 +36,13 @@ cada prueba posterior unas 5,7 veces más rápido y con menos memoria. El tiempo
 envoltura Groth16 que exige la verificación en Ethereum. Con las reglas de gas posteriores a Osaka,
 cada verificación de SP1 requirió unas 259\,000 unidades de gas, entre 17 y 18 veces menos que cada
 una de las tres pruebas de Noir. La versión final del puente con Noir completó transferencias
-reales de Ethereum Sepolia a Optimism Sepolia, en unos tres minutos y medio cada una, y un
-bloqueo realizado desde una cuenta inteligente mediante una llamada interna no permitió acuñar,
-lo que confirma que el diseño solo admite llamadas directas al contrato de bloqueo. Una interfaz web con un modo comparativo muestra, además, que el esquema
+reales de Ethereum Sepolia a Optimism Sepolia, en unos tres minutos y medio cada una. Un
+bloqueo realizado desde una cuenta inteligente mediante una llamada interna no permitió acuñar
+porque la transacción no se dirigía directamente al contrato de bloqueo y, al igual que su
+recibo, excedía el tamaño que admite el circuito de inclusión. Una interfaz web con un modo comparativo muestra, además, que el esquema
 clásico admite una acuñación fraudulenta que el esquema con pruebas rechaza. Los resultados indican que ninguna herramienta domina en todas las
 dimensiones evaluadas y que la elección depende de si el costo determinante es la generación de
-las pruebas o su verificación en la cadena.
+las pruebas o su verificación en la cadena.\looseness=-1
 
 \vspace{0.3cm}
 
